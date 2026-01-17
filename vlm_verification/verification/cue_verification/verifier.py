@@ -11,15 +11,13 @@ from .policies import decide
 
 def _load_jpeg(jpeg_bytes: bytes) -> Image.Image:
     img = Image.open(io.BytesIO(jpeg_bytes))
-    # if img.format != "JPEG":
-    #     raise ValueError(f"Expected JPEG, got {img.format}")
+    if img.format != "JPEG":
+        raise ValueError(f"Expected JPEG, got {img.format}")
     return img.convert("RGB")
 
 
 class DeepVerifier:
     """
-    Pipeline-ready verification component.
-
     Public API:
       - verify(jpeg_bytes, proposed_label) -> Decision
     """

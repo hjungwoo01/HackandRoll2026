@@ -6,23 +6,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def main():
-    # 1) Make sure env vars exist
     assert os.environ.get("GOOGLE_CSE_API_KEY"), "Missing GOOGLE_CSE_API_KEY"
     assert os.environ.get("GOOGLE_CSE_CX"), "Missing GOOGLE_CSE_CX"
 
-    # 2) Query image (local)
-    query_path = Path("C:\\Users\\cms07\\Hack&Roll\\test_images\\lip_balm.jpg")
+    query_path = Path("test.jpeg")
     query_bytes = query_path.read_bytes()
 
-    # 3) Proposed label for CSE search
-    proposed_label = "NIVEA Moisture lip balm stick"  # change to your label
+    proposed_label = "test"  
 
-    # 4) Fetch + CLIP rank
     ranked = fetch_and_rank_web_images(
         query_image=query_bytes,
         proposed_label=proposed_label,
-        n_web=5,     # fetch up to 5 web images
-        top_k=5      # rank/return up to 5
+        n_web=5,     
+        top_k=5      
     )
 
     print(f"Label: {proposed_label}")

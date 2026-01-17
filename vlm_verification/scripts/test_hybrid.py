@@ -7,7 +7,7 @@ from verification.entrypoint import verify_submission
 
 
 def main():
-    img = Path(r"C:\Users\cms07\Hack&Roll\test_images\meat.jpg").read_bytes()
+    img = Path("test.jpeg").read_bytes()
     label = "cooked pork jowl"
 
     res = verify_submission(

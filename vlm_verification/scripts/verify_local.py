@@ -4,8 +4,6 @@ from datetime import datetime
 from pathlib import Path
 import sys
 
-# # Ensure repository root is on sys.path so package imports work
-# sys.path.append(str(Path(__file__).resolve().parents[1]))
 from verification.cue_verification import verify
 
 
@@ -19,7 +17,7 @@ def _to_list_str(value) -> str:
 
 def main() -> int:
 	parser = argparse.ArgumentParser(description="Verify a local image and log results to CSV")
-	parser.add_argument("--file", "-f", default="test_images/meat.jpg", help="Path to the image file (JPEG)")
+	parser.add_argument("--file", "-f", default="test.jpeg", help="Path to the image file (JPEG)")
 	parser.add_argument("--label", "-l", default="pork belly", help="Proposed user-confirmed label")
 	parser.add_argument("--out", default=str(Path("out") / "verifier_log.csv"), help="CSV log file path")
 	args = parser.parse_args()

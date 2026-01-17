@@ -40,7 +40,7 @@ class GoogleCSEImageFetcher:
         api_key: Optional[str] = os.environ.get("GOOGLE_CSE_API_KEY"),
         cx: Optional[str] = os.environ.get("GOOGLE_CSE_CX"),
         timeout_sec: int = 10,
-        max_bytes: int = 4_000_000,  # 4MB
+        max_bytes: int = 10_000_000,  # 10MB
         safe: str = "active",
     ):
         self.api_key = api_key or os.environ.get("GOOGLE_CSE_API_KEY")
