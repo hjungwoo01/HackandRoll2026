@@ -1,7 +1,7 @@
 import uvicorn
 
 from fastapi import FastAPI
-from label_generation import generate_labels_for_image_uuid
+from HackandRoll2026.analytics.label_generation.label_generation import generate_labels_for_image_uuid
 
 app = FastAPI()
 
