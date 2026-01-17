@@ -1,20 +1,23 @@
 import uvicorn
-
 from fastapi import FastAPI
-from HackandRoll2026.analytics.label_generation.label_generation import generate_labels_for_image_uuid
 
-app = FastAPI()
-
-
-@app.get("/labels/{image_uuid}")
-def get_labels(image_uuid: str) -> list[str]:
-  return generate_labels_for_image_uuid(image_uuid)
+from raredex_backend.label_generation.api.routes import router
+from raredex_backend.label_generation.core.config import get_settings
 
 
-@app.get("/feed/{user_id}")
-def get_feed(user_id: str) -> list[str]:
-  # Placeholder for external DB lookup.
-  return ["uuid_one", "uuid_two", "uuid_three"]
+def create_app() -> FastAPI:
+    app = FastAPI(title="RareDex Label Service")
+
+    settings = get_settings()
+    # Attach settings to router (simple DI)
+    router.settings = settings  # type: ignore[attr-defined]
+
+    app.include_router(router)
+    return app
+
+
+app = create_app()
+
 
 if __name__ == "__main__":
-  uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
