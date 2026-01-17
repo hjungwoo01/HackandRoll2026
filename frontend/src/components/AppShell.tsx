@@ -1,11 +1,13 @@
 import { ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { BookOpen, Upload, Trophy, Menu, X, Compass, Award } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { BookOpen, Upload, Trophy, Menu, X, Compass, Award, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from './ui/badge';
+import { Button } from './ui/button';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../state/store';
+import { useAuth } from '../contexts/AuthContext';
 
 interface AppShellProps {
   children: ReactNode;
@@ -20,8 +22,15 @@ const navItems = [
 
 export function AppShell({ children }: AppShellProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { earnedBadges } = useStore();
+  const { user, signOut } = useAuth();
+  
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/auth');
+  };
 
   return (
     <div className="min-h-screen flex">
@@ -71,6 +80,35 @@ export function AppShell({ children }: AppShellProps) {
               );
             })}
           </nav>
+          
+          {/* User Section */}
+          <div className="px-4 py-4 border-t border-gray-200">
+            {user ? (
+              <div className="space-y-2">
+                <div className="px-4 py-2 text-xs text-gray-500 truncate">
+                  {user.email}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={handleSignOut}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => navigate('/auth')}
+              >
+                Sign In
+              </Button>
+            )}
+          </div>
         </div>
       </aside>
 

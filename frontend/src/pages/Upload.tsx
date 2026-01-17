@@ -1,6 +1,8 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../state/store';
+import { useAuth } from '../contexts/AuthContext';
+import { supabaseApi } from '../lib/supabaseApi';
 import { CameraCapture } from '../components/CameraCapture';
 import { PageHeader } from '../components/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
@@ -9,59 +11,23 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Badge } from '../components/ui/badge';
 import { LabelSelect } from '../components/LabelSelect';
 import { validateImageFile, checkImageDimensions } from '../utils/imageHelpers';
-import { imageToJpeg, isJpegFile } from '../utils/imageToJpeg';
-import { Camera, Sparkles, ChevronDown, FileImage } from 'lucide-react';
+import { isJpegFile } from '../utils/imageToJpeg';
+import { Camera, Sparkles, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 
 export function Upload() {
   const navigate = useNavigate();
-  const { labels, submitImage, isLoading } = useStore();
+  const { user } = useAuth();
+  const { labels, fetchLabels, isLoading } = useStore();
+  const [uploading, setUploading] = useState(false);
   const [jpegFile, setJpegFile] = useState<File | null>(null);
   const [capturedImageUrl, setCapturedImageUrl] = useState<string | null>(null);
   const [selectedLabelId, setSelectedLabelId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showTips, setShowTips] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [isConverting, setIsConverting] = useState(false);
   const [fileSize, setFileSize] = useState<number | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileSelect = async (file: File) => {
-    setError(null);
-    setIsConverting(true);
-
-    try {
-      const validation = validateImageFile(file);
-      if (!validation.valid) {
-        setError(validation.error || 'Invalid file');
-        setIsConverting(false);
-        return;
-      }
-
-      // Convert to JPEG
-      const convertedFile = await imageToJpeg(file);
-      
-      // Validate it's actually JPEG
-      if (!isJpegFile(convertedFile)) {
-        throw new Error('Failed to convert image to JPEG');
-      }
-
-      const dimensionCheck = await checkImageDimensions(convertedFile);
-      if (!dimensionCheck.valid) {
-        toast.warning(dimensionCheck.error || 'Image dimensions may be too small');
-      }
-
-      const imageUrl = URL.createObjectURL(convertedFile);
-      setCapturedImageUrl(imageUrl);
-      setJpegFile(convertedFile); // Use JPEG for submission
-      setFileSize(convertedFile.size);
-      setIsConverting(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to process image');
-      setIsConverting(false);
-    }
-  };
 
   const handleCapture = async (file: File) => {
     setError(null);
@@ -119,13 +85,18 @@ export function Upload() {
     setShowConfirmDialog(true);
   };
 
-  const confirmSubmit = async () => {
-    if (!jpegFile || !selectedLabelId) return;
+  useEffect(() => {
+    fetchLabels();
+  }, [fetchLabels]);
 
+  const confirmSubmit = async () => {
+    if (!jpegFile || !selectedLabelId || !user) return;
+
+    setUploading(true);
     try {
-      await submitImage(jpegFile, selectedLabelId);
+      await supabaseApi.createSubmission(user.id, jpegFile, selectedLabelId);
       toast.success('Added to RareDex!', {
-        description: 'Your submission is now in the verification queue.',
+        description: 'Your submission is now in the feed.',
       });
       
       if (capturedImageUrl) {
@@ -137,13 +108,16 @@ export function Upload() {
       setFileSize(null);
       setShowConfirmDialog(false);
       
+      // Refresh feed and navigate
       setTimeout(() => {
-        navigate('/collection');
+        navigate('/feed');
       }, 1500);
     } catch (err) {
       toast.error('Failed to submit', {
         description: err instanceof Error ? err.message : 'Please try again.',
       });
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -171,53 +145,15 @@ export function Upload() {
                 Take Photo
               </CardTitle>
               <CardDescription>
-                Use your camera or choose from library (all images converted to JPEG)
+                Take a photo with your camera to add to RareDex
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <CameraCapture
                 onCapture={handleCapture}
                 capturedImage={capturedImageUrl}
-                disabled={isLoading || isConverting}
+                disabled={isLoading}
               />
-              
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-gray-200"></span>
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-white px-2 text-gray-500">Or</span>
-                </div>
-              </div>
-
-              <div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleFileSelect(file);
-                  }}
-                  className="hidden"
-                />
-                <Button
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isLoading || isConverting}
-                  className="w-full"
-                >
-                  <FileImage className="h-4 w-4 mr-2" />
-                  Choose from Library
-                </Button>
-              </div>
-
-              {isConverting && (
-                <div className="text-center py-4">
-                  <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600 mb-2"></div>
-                  <p className="text-sm text-gray-600">Converting to JPEG...</p>
-                </div>
-              )}
 
               {jpegFile && fileSize && (
                 <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg">
@@ -257,7 +193,7 @@ export function Upload() {
 
           <Button
             onClick={handleSubmit}
-            disabled={isLoading || !jpegFile || !selectedLabelId || isConverting}
+            disabled={isLoading || !jpegFile || !selectedLabelId}
             size="lg"
             className="w-full"
           >
@@ -363,7 +299,7 @@ export function Upload() {
             >
               Cancel
             </Button>
-            <Button onClick={confirmSubmit} disabled={isLoading}>
+            <Button onClick={confirmSubmit} disabled={uploading}>
               {isLoading ? 'Submitting...' : 'Confirm & Add to RareDex'}
             </Button>
           </DialogFooter>

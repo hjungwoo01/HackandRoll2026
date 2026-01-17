@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../state/store';
+import { useAuth } from '../contexts/AuthContext';
 import { FeedPost } from '../components/FeedPost';
 import { FeedSkeleton } from '../components/FeedSkeleton';
 import { EmptyState } from '../components/EmptyState';
@@ -9,6 +10,7 @@ import { Compass, Sparkles, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export function Feed() {
+  const { user } = useAuth();
   const {
     feedByTab,
     loadingByTab,
@@ -28,8 +30,8 @@ export function Feed() {
   const hasMore = hasMoreByTab[activeTab];
 
   useEffect(() => {
-    fetchFeed(activeTab);
-  }, [activeTab, fetchFeed]);
+    fetchFeed(user?.id || null, activeTab);
+  }, [activeTab, user?.id]);
 
   // Infinite scroll with IntersectionObserver
   useEffect(() => {
@@ -39,7 +41,7 @@ export function Feed() {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !isLoading) {
-          fetchNextFeedPage(activeTab);
+          fetchNextFeedPage(user?.id || null, activeTab);
         }
       },
       { threshold: 0.1 }
@@ -57,7 +59,22 @@ export function Feed() {
   };
 
   const handleRefresh = () => {
-    refreshFeed(activeTab);
+    refreshFeed(user?.id || null, activeTab);
+  };
+
+  const handleLike = (itemId: string) => {
+    if (!user) return; // Shouldn't happen since route is protected
+    likeFeedItem(itemId, user.id);
+  };
+
+  const handleSave = (itemId: string) => {
+    if (!user) return;
+    saveFeedItem(itemId, user.id);
+  };
+
+  const handleReport = (itemId: string, reason: any, details?: string) => {
+    if (!user) return;
+    reportFeedItem(itemId, user.id, reason, details);
   };
 
   return (
@@ -114,9 +131,9 @@ export function Feed() {
                 <FeedPost
                   key={item.id}
                   item={item}
-                  onLike={() => likeFeedItem(item.id)}
-                  onSave={() => saveFeedItem(item.id)}
-                  onReport={(reason, details) => reportFeedItem(item.id, reason, details)}
+                  onLike={() => handleLike(item.submissionId)}
+                  onSave={() => handleSave(item.submissionId)}
+                  onReport={(reason, details) => handleReport(item.submissionId, reason, details)}
                 />
               ))}
             </div>

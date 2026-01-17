@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useStore } from '../state/store';
+import { useAuth } from '../contexts/AuthContext';
 import { PageHeader } from '../components/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { PercentileBadge } from '../components/PercentileBadge';
@@ -17,13 +18,14 @@ import {
 } from '../components/ui/dialog';
 
 export function Leaderboard() {
-  const { leaderboard, fetchLeaderboard, currentUserId, isLoading } = useStore();
+  const { user } = useAuth();
+  const { leaderboard, fetchLeaderboard } = useStore();
 
   useEffect(() => {
     fetchLeaderboard();
   }, [fetchLeaderboard]);
 
-  if (isLoading && leaderboard.length === 0) {
+  if (leaderboard.length === 0) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <PageHeader title="Leaderboard" subtitle="See how you rank against other collectors" />
@@ -35,8 +37,12 @@ export function Leaderboard() {
     );
   }
 
-  const currentUserRank = leaderboard.findIndex((u) => u.userId === currentUserId) + 1;
-  const currentUserStats = leaderboard.find((u) => u.userId === currentUserId);
+  const currentUserRank = user ? leaderboard.findIndex((u) => u.user_id === user.id) + 1 : 0;
+  const currentUserStats = user ? leaderboard.find((u) => u.user_id === user.id) : null;
+  
+  // Calculate percentile (simplified for demo)
+  const totalUsers = leaderboard.length;
+  const percentile = currentUserRank > 0 ? Math.round(((totalUsers - currentUserRank) / totalUsers) * 100) : 0;
 
   const getRankIcon = (rank: number) => {
     if (rank === 1) return <Medal className="h-6 w-6 text-yellow-500" />;
@@ -96,10 +102,10 @@ export function Leaderboard() {
                     </div>
                   </div>
                   <div className="text-2xl font-bold mb-2">
-                    {formatPercentile(currentUserStats.percentile)}
+                    {formatPercentile(percentile)}
                   </div>
                   <p className="text-sm opacity-90">
-                    You're performing better than {currentUserStats.percentile}% of collectors
+                    You're performing better than {percentile}% of collectors
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4 md:col-span-2">
@@ -108,23 +114,16 @@ export function Leaderboard() {
                     <div className="text-2xl font-bold">{formatScore(currentUserStats.points)}</div>
                   </div>
                   <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                    <div className="text-xs opacity-90 mb-1">Accepted</div>
-                    <div className="text-2xl font-bold">{currentUserStats.verifiedUploads}</div>
+                    <div className="text-xs opacity-90 mb-1">Uploads</div>
+                    <div className="text-2xl font-bold">{currentUserStats.uploads_count || 0}</div>
                   </div>
                   <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                    <div className="text-xs opacity-90 mb-1">Accuracy</div>
-                    <div className="text-2xl font-bold">
-                      {currentUserStats.totalVotes > 0
-                        ? Math.round(
-                            (currentUserStats.correctVotes / currentUserStats.totalVotes) * 100
-                          )
-                        : 0}
-                      %
-                    </div>
+                    <div className="text-xs opacity-90 mb-1">Likes Received</div>
+                    <div className="text-2xl font-bold">{currentUserStats.likes_received || 0}</div>
                   </div>
                   <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                    <div className="text-xs opacity-90 mb-1">Votes</div>
-                    <div className="text-2xl font-bold">{currentUserStats.totalVotes}</div>
+                    <div className="text-xs opacity-90 mb-1">Percentile</div>
+                    <div className="text-2xl font-bold">{percentile}%</div>
                   </div>
                 </div>
               </div>
@@ -159,17 +158,14 @@ export function Leaderboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {leaderboard.map((user, index) => {
-                    const isCurrentUser = user.userId === currentUserId;
+                  {leaderboard.map((entry, index) => {
+                    const isCurrentUser = entry.user_id === (user?.id || '');
                     const rank = index + 1;
-                    const accuracy =
-                      user.totalVotes > 0
-                        ? Math.round((user.correctVotes / user.totalVotes) * 100)
-                        : 0;
+                    const displayName = entry.profile?.display_name || `User ${entry.user_id.slice(-4)}`;
 
                     return (
                       <motion.tr
-                        key={user.userId}
+                        key={entry.user_id}
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: index * 0.05 }}
@@ -186,20 +182,20 @@ export function Leaderboard() {
                         </td>
                         <td className="py-4 px-4">
                           <span className="text-gray-900">
-                            {isCurrentUser ? 'You' : `User ${user.userId.slice(-4)}`}
+                            {isCurrentUser ? 'You' : displayName}
                           </span>
                         </td>
                         <td className="py-4 px-4">
-                          <span className="font-bold text-gray-900">{formatScore(user.points)}</span>
+                          <span className="font-bold text-gray-900">{formatScore(entry.points)}</span>
                         </td>
                         <td className="py-4 px-4">
-                          <span className="text-gray-600">{user.verifiedUploads}</span>
+                          <span className="text-gray-600">{entry.uploads_count}</span>
                         </td>
                         <td className="py-4 px-4">
-                          <span className="text-gray-600">{accuracy}%</span>
+                          <span className="text-gray-600">{entry.likes_received}</span>
                         </td>
                         <td className="py-4 px-4">
-                          <PercentileBadge percentile={user.percentile} />
+                          <PercentileBadge percentile={Math.round(((totalUsers - rank) / totalUsers) * 100)} />
                         </td>
                       </motion.tr>
                     );
