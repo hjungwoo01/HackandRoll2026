@@ -4,3 +4,5 @@ test_images/
 .venv/
 __pycache__/*
 *.pyc
+*.egg-info/
+build/

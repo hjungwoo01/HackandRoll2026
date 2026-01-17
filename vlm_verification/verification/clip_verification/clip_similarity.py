@@ -62,9 +62,6 @@ class ClipTFEmbedder:
 
     @torch.no_grad()
     def embed_images(self, images: Sequence[ImageLike]) -> np.ndarray:
-        """
-        Returns L2-normalized CLIP image embeddings: (N, D).
-        """
         bs = self.cfg.batch_size
         out_chunks = []
 

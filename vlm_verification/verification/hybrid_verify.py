@@ -27,9 +27,6 @@ def hybrid_verify(
     Hybrid verification:
       - Primary: Gemini VLM verification
       - Secondary: web+CLIP only as weak consistency check
-
-    Returns:
-      accept/reject + reason + debug
     """
 
     # ---- A) Primary decision: VLM ----

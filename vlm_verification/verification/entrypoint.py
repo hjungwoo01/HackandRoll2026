@@ -16,13 +16,6 @@ def verify_submission(
     is_controversial: bool = True,
     options: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """
-    Single entrypoint callable from backend/frontend integration layer.
-
-    - If not controversial, returns a skip decision without invoking ML.
-    - Otherwise runs the existing hybrid verification pipeline, optionally
-      including web retrieval based on options.
-    """
 
     options = options or {}
 
@@ -68,10 +61,6 @@ def verify_submission(
 
 
 def _hybrid_result_to_dict(result: HybridResult, *, include_debug: bool) -> Dict[str, Any]:
-    """
-    Convert HybridResult into a JSON-serializable dict required by callers.
-    Pull VLM confidence from the embedded debug if available.
-    """
     decision = "accept" if result.accept else "reject"
 
     # Extract confidence if available from VLM debug

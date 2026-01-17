@@ -15,10 +15,6 @@ from PIL import Image
 from .clip_similarity import ClipTFEmbedder
 
 
-# -----------------------------
-# Types
-# -----------------------------
-
 ImageLike = Union[str, bytes, Image.Image]  # path | bytes | PIL
 
 
@@ -37,19 +33,7 @@ class RankedWebImage:
     data: bytes
 
 
-# -----------------------------
-# Google CSE image fetcher
-# -----------------------------
-
 class GoogleCSEImageFetcher:
-    """
-    Fetch top-N image results using Google Custom Search JSON API (CSE)
-    and download the image bytes.
-
-    Requires:
-      - GOOGLE_CSE_API_KEY
-      - GOOGLE_CSE_CX
-    """
 
     def __init__(
         self,
@@ -76,10 +60,6 @@ class GoogleCSEImageFetcher:
         )
 
     def search_image_urls(self, query: str, num: int = 5) -> List[str]:
-        """
-        Returns image URLs from CSE.
-        One request counts as one query; 'num' can be up to 10.
-        """
         num = max(1, min(num, 10))
         params = {
             "key": self.api_key,
@@ -97,11 +77,6 @@ class GoogleCSEImageFetcher:
         return [it.get("link") for it in items if it.get("link")]
 
     def _download(self, url: str) -> Optional[WebImage]:
-        """
-        Downloads the image bytes with basic validation:
-        - content-type should be image/*
-        - size under max_bytes
-        """
         try:
             r = self.sess.get(url, stream=True, timeout=self.timeout_sec, headers={"Accept": "image/*,*/*"})
             r.raise_for_status()
@@ -129,10 +104,7 @@ class GoogleCSEImageFetcher:
             return None
 
     def fetch_top_images(self, query: str, n: int = 10, oversample: int = 2) -> List[WebImage]:
-        """
-        Searches and downloads up to n images.
-        Oversamples URLs because some downloads fail.
-        """
+
         urls = self.search_image_urls(query, num=min(10, max(n * oversample, n)))
         out: List[WebImage] = []
         seen = set()
@@ -152,11 +124,6 @@ class GoogleCSEImageFetcher:
 
         return out
 
-
-# -----------------------------
-# Pipeline: fetch + CLIP rank
-# -----------------------------
-
 def fetch_and_rank_web_images(
     query_image: ImageLike,
     proposed_label: str,
@@ -165,11 +132,7 @@ def fetch_and_rank_web_images(
     fetcher: Optional[GoogleCSEImageFetcher] = None,
     clip: Optional[ClipTFEmbedder] = None,
 ) -> List[RankedWebImage]:
-    """
-    Fetch top-N web images for the proposed label and rank them by CLIP similarity.
-
-    Returns: top_k RankedWebImage entries, sorted desc by score.
-    """
+    
     fetcher = fetcher or GoogleCSEImageFetcher()
     clip = clip or ClipTFEmbedder()
 
