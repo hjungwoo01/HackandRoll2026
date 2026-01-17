@@ -28,7 +28,7 @@ export function Leaderboard() {
   if (leaderboard.length === 0) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <PageHeader title="Leaderboard" subtitle="See how you rank against other collectors" />
+        <PageHeader title="Leaderboard" subtitle="See how you rank against other spotters" />
         <div className="text-center py-12">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
           <p className="mt-4 text-gray-600">Loading leaderboard...</p>
@@ -55,7 +55,7 @@ export function Leaderboard() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <PageHeader
         title="Leaderboard"
-        subtitle="See how you rank against other collectors"
+        subtitle="See how you rank against other spotters"
         rightAction={
           <Dialog>
             <DialogTrigger asChild>
@@ -105,7 +105,7 @@ export function Leaderboard() {
                     {formatPercentile(percentile)}
                   </div>
                   <p className="text-sm opacity-90">
-                    You're performing better than {percentile}% of collectors
+                    You're performing better than {percentile}% of spotters
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4 md:col-span-2">
@@ -135,7 +135,7 @@ export function Leaderboard() {
       {/* Leaderboard Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Top Collectors</CardTitle>
+          <CardTitle>Top Spotters</CardTitle>
         </CardHeader>
         <CardContent>
           {leaderboard.length === 0 ? (

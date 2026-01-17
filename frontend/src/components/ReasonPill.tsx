@@ -10,11 +10,11 @@ const reasonConfig: Record<
   NonNullable<FeedItem['reason']>,
   { label: string; icon: typeof TrendingUp; variant: 'default' | 'secondary' | 'destructive' }
 > = {
-  trending: { label: 'Trending', icon: TrendingUp, variant: 'default' },
+  popular: { label: 'Popular', icon: TrendingUp, variant: 'default' },
   new: { label: 'New', icon: Sparkles, variant: 'secondary' },
   'near-you': { label: 'Near You', icon: MapPin, variant: 'secondary' },
   'similar-to-you': { label: 'For You', icon: Users, variant: 'default' },
-  'rare-find': { label: 'Rare Find', icon: Gem, variant: 'destructive' },
+  suggested: { label: 'Suggested', icon: Gem, variant: 'secondary' },
 };
 
 export function ReasonPill({ reason }: ReasonPillProps) {

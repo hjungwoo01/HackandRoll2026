@@ -24,6 +24,10 @@ export interface Submission {
   created_at: string;
   report_count: number;
   status: 'active' | 'flagged' | 'rejected';
+  coarse_label_id?: number | null;
+  coarse_confidence?: number | null;
+  fine_dex_entry_id?: number | null;
+  fine_confidence?: number | null;
 }
 
 export interface UserStats {
@@ -178,7 +182,7 @@ export const supabaseApi = {
           reportCount: s.report_count || 0,
           flagged: s.status === 'flagged' || s.status === 'rejected',
           caption: s.caption || undefined,
-          reason: filter === 'new' ? 'new' as const : 'trending' as const,
+            reason: filter === 'new' ? 'new' as const : 'popular' as const,
         };
       });
 
@@ -292,7 +296,11 @@ export const supabaseApi = {
     userId: string,
     file: File,
     labelId: number,
-    caption?: string
+    caption?: string,
+    coarseLabelId?: number | null,
+    coarseConfidence?: number | null,
+    fineDexEntryId?: number | null,
+    fineConfidence?: number | null
   ): Promise<Submission> {
     // Verify user is authenticated
     const { data: { user } } = await supabase.auth.getUser();
@@ -334,6 +342,10 @@ export const supabaseApi = {
         caption: caption || null,
         status: 'active', // Explicitly set status
         report_count: 0, // Explicitly set report_count
+        coarse_label_id: coarseLabelId || null,
+        coarse_confidence: coarseConfidence || null,
+        fine_dex_entry_id: fineDexEntryId || null,
+        fine_confidence: fineConfidence || null,
       })
       .select()
       .single();

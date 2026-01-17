@@ -3,6 +3,7 @@ import { Card, CardContent } from './ui/card';
 import { Star, Shield, Crown, Lock } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '../lib/utils';
+import { rarityToSet, getSetColor } from '../utils/sanitizeCopy';
 import type { Badge as BadgeType } from '../api/types';
 
 interface BadgeCardProps {
@@ -17,13 +18,13 @@ const iconMap: Record<string, typeof Star> = {
   Crown,
 };
 
-const rarityStyles = {
+const setThemeStyles = {
   common: 'border-gray-300 bg-gradient-to-br from-gray-50 to-gray-100',
   rare: 'border-blue-300 bg-gradient-to-br from-blue-50 to-blue-100',
   epic: 'border-purple-300 bg-gradient-to-br from-purple-50 to-purple-100',
 };
 
-const rarityGlow = {
+const setThemeGlow = {
   common: '',
   rare: 'shadow-blue-200',
   epic: 'shadow-purple-200',
@@ -44,7 +45,7 @@ export function BadgeCard({ badge, earned, className }: BadgeCardProps) {
           'relative overflow-hidden transition-all',
           isLocked
             ? 'opacity-50 grayscale'
-            : `border-2 ${rarityStyles[badge.rarity]} ${rarityGlow[badge.rarity]}`,
+            : `border-2 ${setThemeStyles[badge.rarity]} ${setThemeGlow[badge.rarity]}`,
           earned && 'shadow-lg'
         )}
       >
@@ -90,7 +91,7 @@ export function BadgeCard({ badge, earned, className }: BadgeCardProps) {
                   }
                   className="text-xs"
                 >
-                  {badge.rarity}
+                  {rarityToSet(badge.rarity)}
                 </Badge>
               </>
             )}

@@ -46,7 +46,7 @@ export function LabelSelect({ labels, value, onChange, disabled }: LabelSelectPr
           <DialogHeader>
             <DialogTitle>Select Category</DialogTitle>
             <DialogDescription>
-              Choose the category that best describes this rare item
+              Choose the category that best describes this item
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
