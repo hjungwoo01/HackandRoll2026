@@ -1,9 +1,22 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 
-from foreground_check import check_foreground
-from recapture_check_gemini import check_recapture
+from lightweight_validation.foreground_check import check_foreground
+from lightweight_validation.recapture_check_gemini import check_recapture
 
-app = FastAPI()
+from analytics.raredex_backend.label_generation.api.routes import router
+from analytics.raredex_backend.label_generation.core.config import get_settings
+
+def create_app() -> FastAPI:
+    app = FastAPI(title="ML services")
+
+    settings = get_settings()
+    # Attach settings to router (simple DI)
+    router.settings = settings  # type: ignore[attr-defined]
+
+    app.include_router(router)
+    return app
+
+app = create_app()
 
 @app.get("/foreground-check/{image_id}")
 async def foreground_check(file: UploadFile = File(...)):
