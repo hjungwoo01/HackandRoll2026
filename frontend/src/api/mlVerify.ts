@@ -1,5 +1,3 @@
-import { supabase } from '../lib/supabaseClient';
-
 // ============================================
 // TYPES
 // ============================================
@@ -75,23 +73,6 @@ export const mlVerifyApi = {
     fineLabel: string | null
   ): Promise<MLVerificationResponse> {
     try {
-      // Get access token from Supabase
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-      if (sessionError || !session?.access_token) {
-        console.warn('[verify] No session token available, falling back to mock');
-        const payload: MLVerificationRequest = {
-          submission_id: submissionId,
-          user_id: userId,
-          fine_dex_entry_id: fineDexEntryId,
-          fine_label: fineLabel,
-        };
-        console.log('[verify] request payload:', payload);
-        const result = await mockVerifier(submissionId, userId, fineDexEntryId, fineLabel);
-        console.log('[verify] response:', result);
-        return result;
-      }
-
       const requestBody: MLVerificationRequest = {
         submission_id: submissionId,
         user_id: userId,
@@ -108,7 +89,6 @@ export const mlVerifyApi = {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
           },
         }
       );

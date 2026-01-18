@@ -1,4 +1,3 @@
-import { supabase } from '../lib/supabaseClient';
 import type { DexEntry } from '../lib/supabaseDex';
 import { supabaseDex } from '../lib/supabaseDex';
 
@@ -112,16 +111,9 @@ export const mlApi = {
    */
   async validateImage(submissionId: string): Promise<{ valid: boolean; reason?: string }> {
     try {
-      // Get access token from Supabase
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
       };
-      
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-      }
 
       // Check 1: Foreground check
       console.log('[ml] running foreground-check for:', submissionId);
@@ -175,16 +167,9 @@ export const mlApi = {
     labels: Array<{ id: number; name: string }>
   ): Promise<MLClassificationResponse> {
     try {
-      // Get access token from Supabase
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
       };
-      
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-      }
 
       console.log('[ml] calling vlm-verification for classification:', submissionId);
 
