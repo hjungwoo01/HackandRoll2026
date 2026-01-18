@@ -107,7 +107,73 @@ async function mockClassifier(
 
 export const mlApi = {
   /**
-   * Classify a submission using ML endpoint
+   * Run lightweight validation checks (foreground + recapture)
+   * Returns true if both checks pass, false otherwise
+   */
+  async validateImage(submissionId: string): Promise<{ valid: boolean; reason?: string }> {
+    const mlEndpoint = import.meta.env.VITE_ML_ENDPOINT;
+
+    if (!mlEndpoint) {
+      console.warn('[ml] No ML endpoint configured, skipping validation');
+      return { valid: true }; // Skip validation if no endpoint
+    }
+
+    try {
+      // Get access token from Supabase
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
+      // Check 1: Foreground check
+      console.log('[ml] running foreground-check for:', submissionId);
+      const foregroundResponse = await fetch(`${mlEndpoint}/foreground-check/${submissionId}`, {
+        method: 'GET',
+        headers,
+      });
+
+      if (!foregroundResponse.ok) {
+        throw new Error(`Foreground check failed: ${foregroundResponse.statusText}`);
+      }
+
+      const foregroundResult = await foregroundResponse.json();
+      if (!foregroundResult.accept) {
+        console.log('[ml] foreground-check failed:', foregroundResult.reason);
+        return { valid: false, reason: foregroundResult.reason || 'Foreground check failed' };
+      }
+
+      // Check 2: Recapture check
+      console.log('[ml] running recapture-check for:', submissionId);
+      const recaptureResponse = await fetch(`${mlEndpoint}/recapture-check/${submissionId}`, {
+        method: 'GET',
+        headers,
+      });
+
+      if (!recaptureResponse.ok) {
+        throw new Error(`Recapture check failed: ${recaptureResponse.statusText}`);
+      }
+
+      const recaptureResult = await recaptureResponse.json();
+      if (!recaptureResult.accept) {
+        console.log('[ml] recapture-check failed:', recaptureResult.reason);
+        return { valid: false, reason: recaptureResult.reason || 'Recapture check failed' };
+      }
+
+      console.log('[ml] validation checks passed');
+      return { valid: true };
+    } catch (error) {
+      console.error('[ml] validation failed:', error);
+      return { valid: false, reason: error instanceof Error ? error.message : 'Validation failed' };
+    }
+  },
+
+  /**
+   * Classify a submission using VLM verification endpoint (without proposed_label)
    * Falls back to mock classifier if endpoint is unavailable
    */
   async classifySubmission(
@@ -115,11 +181,11 @@ export const mlApi = {
     userId: string,
     labels: Array<{ id: number; name: string }>
   ): Promise<MLClassificationResponse> {
-    const mlEndpoint = import.meta.env.VITE_ML_ENDPOINT;
+    const verifyEndpoint = import.meta.env.VITE_VERIFY_ML_ENDPOINT;
 
     // If no endpoint configured, use mock
-    if (!mlEndpoint) {
-      console.log('[ml] No ML endpoint configured, using mock classifier');
+    if (!verifyEndpoint) {
+      console.log('[ml] No verification endpoint configured, using mock classifier');
       console.log('[ml] request payload:', { submission_id: submissionId, user_id: userId });
       return mockClassifier(submissionId, userId, labels);
     }
@@ -128,52 +194,54 @@ export const mlApi = {
       // Get access token from Supabase
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
-      if (sessionError || !session?.access_token) {
-        console.warn('[ml] No session token available, falling back to mock');
-        console.log('[ml] request payload:', { submission_id: submissionId, user_id: userId });
-        return mockClassifier(submissionId, userId, labels);
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
       }
 
-      const requestBody: MLClassificationRequest = {
-        submission_id: submissionId,
-        user_id: userId,
-      };
+      console.log('[ml] calling vlm-verification for classification:', submissionId);
 
-      console.log('[ml] request payload:', requestBody);
-
-      const response = await fetch(`${mlEndpoint}/classify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify(requestBody),
+      // Call VLM verification endpoint without proposed_label to get classification
+      const response = await fetch(`${verifyEndpoint}/vlm-verification/${submissionId}`, {
+        method: 'GET',
+        headers,
       });
 
       if (!response.ok) {
-        throw new Error(`ML endpoint returned ${response.status}: ${response.statusText}`);
+        throw new Error(`VLM endpoint returned ${response.status}: ${response.statusText}`);
       }
 
-      const data = await response.json() as MLClassificationResponse;
+      const data = await response.json();
 
-      // Validate response structure
-      if (!data.coarse_label || !data.coarse_label.id || !data.coarse_label.name) {
-        throw new Error('Invalid ML response: missing coarse_label');
-      }
-      if (typeof data.confidence !== 'number' || data.confidence < 0 || data.confidence > 1) {
-        throw new Error('Invalid ML response: confidence must be 0..1');
-      }
-      if (!Array.isArray(data.suggested_entries)) {
-        throw new Error('Invalid ML response: suggested_entries must be an array');
+      // Map VLM response to MLClassificationResponse format
+      // VLM returns: { coarse_label: { id, name }, confidence, suggested_entries }
+      const mappedResponse: MLClassificationResponse = {
+        coarse_label: {
+          id: data.coarse_label?.id || 0,
+          name: data.coarse_label?.name || 'Unknown',
+        },
+        confidence: data.confidence || 0.85,
+        suggested_entries: data.suggested_entries || [],
+      };
+
+      // Map coarse_label name to actual label ID from labels array
+      const matchedLabel = labels.find(l => 
+        l.name.toLowerCase() === mappedResponse.coarse_label.name.toLowerCase()
+      );
+      if (matchedLabel) {
+        mappedResponse.coarse_label.id = matchedLabel.id;
       }
 
       console.log('[ml] classification successful:', {
-        category: data.coarse_label.name,
-        confidence: data.confidence,
-        suggestions: data.suggested_entries.length,
+        category: mappedResponse.coarse_label.name,
+        confidence: mappedResponse.confidence,
+        suggestions: mappedResponse.suggested_entries.length,
       });
 
-      return data;
+      return mappedResponse;
     } catch (error) {
       console.error('[ml] failed, using mock fallback:', error);
       console.log('[ml] request payload:', { submission_id: submissionId, user_id: userId });

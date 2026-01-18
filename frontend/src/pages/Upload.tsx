@@ -181,7 +181,20 @@ export function Upload() {
     setError(null);
 
     try {
-      // Call ML API
+      // Step 1: Run lightweight validation checks
+      console.log('[ml] running validation checks...');
+      const validation = await mlApi.validateImage(submissionId);
+      
+      if (!validation.valid) {
+        throw new Error(validation.reason || 'Image validation failed. Please retake the photo.');
+      }
+
+      // Check if aborted
+      if (classifyAbortController.current?.signal.aborted) {
+        return;
+      }
+
+      // Step 2: Call VLM verification endpoint for classification (without proposed_label)
       const result = await mlApi.classifySubmission(
         submissionId,
         user.id,
@@ -217,9 +230,12 @@ export function Upload() {
       }
       console.error('[ml] failed:', err);
       setClassificationStatus('failed');
-      setError(err instanceof Error ? err.message : 'Classification failed');
+      const errorMessage = err instanceof Error ? err.message : 'Classification failed';
+      setError(errorMessage);
       toast.error('Classification failed', {
-        description: 'Please try again or manually select a category.',
+        description: errorMessage.includes('validation') 
+          ? errorMessage 
+          : 'Please try again or manually select a category.',
       });
     }
   };

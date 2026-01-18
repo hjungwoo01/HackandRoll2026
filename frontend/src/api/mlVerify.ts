@@ -118,32 +118,43 @@ export const mlVerifyApi = {
 
       console.log('[verify] request payload:', requestBody);
 
-      const response = await fetch(`${verifyEndpoint}/verify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify(requestBody),
-      });
+      // Call VLM verification endpoint with proposed_label for verification
+      const response = await fetch(
+        `${verifyEndpoint}/vlm-verification/${submissionId}?proposed_label=${encodeURIComponent(fineLabel || '')}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`Verification endpoint returned ${response.status}: ${response.statusText}`);
       }
 
-      const data = await response.json() as MLVerificationResponse;
+      const data = await response.json();
+
+      // Map backend response format { decision, message, confidence } to frontend format
+      // Backend returns: { decision: "accept"|"reject", message: string, confidence: number }
+      const mappedResponse: MLVerificationResponse = {
+        ok: data.decision === "accept",
+        score: data.confidence || 0.5,
+        reason: data.message || undefined,
+      };
 
       // Validate response structure
-      if (typeof data.ok !== 'boolean') {
-        throw new Error('Invalid verification response: missing ok field');
+      if (typeof mappedResponse.ok !== 'boolean') {
+        throw new Error('Invalid verification response: missing decision field');
       }
-      if (typeof data.score !== 'number' || data.score < 0 || data.score > 1) {
-        throw new Error('Invalid verification response: score must be 0..1');
+      if (typeof mappedResponse.score !== 'number' || mappedResponse.score < 0 || mappedResponse.score > 1) {
+        throw new Error('Invalid verification response: confidence must be 0..1');
       }
 
-      console.log('[verify] response:', data);
+      console.log('[verify] response:', mappedResponse);
 
-      return data;
+      return mappedResponse;
     } catch (error) {
       console.error('[verify] failed, using mock fallback:', error);
       const payload: MLVerificationRequest = {
