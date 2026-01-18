@@ -22,8 +22,8 @@ export function Leaderboard() {
   const { leaderboard, fetchLeaderboard } = useStore();
 
   useEffect(() => {
-    fetchLeaderboard();
-  }, [fetchLeaderboard]);
+    fetchLeaderboard(user?.id);
+  }, [fetchLeaderboard, user?.id]);
 
   if (leaderboard.length === 0) {
     return (
@@ -37,12 +37,18 @@ export function Leaderboard() {
     );
   }
 
-  const currentUserRank = user ? leaderboard.findIndex((u) => u.user_id === user.id) + 1 : 0;
+  const currentUserIndex = user ? leaderboard.findIndex((u) => u.user_id === user.id) : -1;
+  const currentUserRank = currentUserIndex >= 0 ? currentUserIndex + 1 : 0;
   const currentUserStats = user ? leaderboard.find((u) => u.user_id === user.id) : null;
   
-  // Calculate percentile (simplified for demo)
+  // Calculate percentile
   const totalUsers = leaderboard.length;
-  const percentile = currentUserRank > 0 ? Math.round(((totalUsers - currentUserRank) / totalUsers) * 100) : 0;
+  // Percentile: percentage of users you're performing better than
+  // Formula: ((totalUsers - rank) / totalUsers) * 100
+  // If rank is 1 of 10, you're better than 9/10 = 90%
+  const percentile = currentUserRank > 0 && totalUsers > 0 
+    ? Math.max(0, Math.min(100, Math.round(((totalUsers - currentUserRank) / totalUsers) * 100)))
+    : 0;
 
   const getRankIcon = (rank: number) => {
     if (rank === 1) return <Medal className="h-6 w-6 text-yellow-500" />;
