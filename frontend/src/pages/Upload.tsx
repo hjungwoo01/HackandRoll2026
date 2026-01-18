@@ -35,9 +35,8 @@ export function Upload() {
   const [step, setStep] = useState<'capture' | 'coarse' | 'fine'>('capture');
   const [coarseLabelId, setCoarseLabelId] = useState<number | null>(null);
   const [coarseConfidence, setCoarseConfidence] = useState<number | null>(null);
-  const [fineDexEntryId, setFineDexEntryId] = useState<number | null>(null);
+  const [fineItemName, setFineItemName] = useState<string>('');
   const [selectedVersion] = useState<string>('v0');
-  const [fineEntries, setFineEntries] = useState<any[]>([]);
 
   const handleCapture = async (file: File) => {
     setError(null);
@@ -93,8 +92,8 @@ export function Upload() {
   };
 
   const handleFineNext = () => {
-    if (!fineDexEntryId) {
-      setError('Please select a specific entry');
+    if (!fineItemName || fineItemName.trim() === '') {
+      setError('Please enter a specific item name');
       return;
     }
     setShowConfirmDialog(true);
@@ -104,14 +103,9 @@ export function Upload() {
     fetchLabels();
   }, [fetchLabels]);
 
-  useEffect(() => {
-    if (coarseLabelId && step === 'fine') {
-      supabaseDex.getDexEntries(selectedVersion, { coarseLabelId }).then(setFineEntries);
-    }
-  }, [coarseLabelId, step, selectedVersion]);
 
   const confirmSubmit = async () => {
-    if (!jpegFile || !coarseLabelId || !fineDexEntryId || !user) return;
+    if (!jpegFile || !coarseLabelId || !fineItemName || !user) return;
 
     setUploading(true);
     try {
@@ -122,8 +116,9 @@ export function Upload() {
         undefined, // caption
         coarseLabelId,
         coarseConfidence,
-        fineDexEntryId,
-        null // fine confidence
+        null, // fineDexEntryId
+        null, // fine confidence
+        fineItemName // fine item name as text input
       );
       toast.success('Added to RareDex!', {
         description: 'Your submission is now in the feed.',
@@ -135,7 +130,7 @@ export function Upload() {
       setJpegFile(null);
       setCapturedImageUrl(null);
       setCoarseLabelId(null);
-      setFineDexEntryId(null);
+      setFineItemName('');
       setFileSize(null);
       setStep('capture');
       setShowConfirmDialog(false);
@@ -160,7 +155,6 @@ export function Upload() {
   };
 
   const selectedCoarseLabel = labels.find((l) => l.id === coarseLabelId);
-  const selectedFineEntry = fineEntries.find((e) => e.id === fineDexEntryId);
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -285,17 +279,17 @@ export function Upload() {
           {step === 'fine' && coarseLabelId && (
             <Card>
               <CardHeader>
-                <CardTitle>Step 3: Choose Specific Item</CardTitle>
+                <CardTitle>Step 3: Enter Specific Item</CardTitle>
                 <CardDescription>
-                  Select the specific item from {selectedCoarseLabel?.name || 'this category'}
+                  Enter the name of the specific item in {selectedCoarseLabel?.name || 'this category'}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <FineEntrySelect
                   coarseLabelId={coarseLabelId}
                   versionId={selectedVersion}
-                  value={fineDexEntryId}
-                  onChange={setFineDexEntryId}
+                  value={fineItemName}
+                  onChange={setFineItemName}
                   disabled={isLoading}
                 />
                 <div className="flex gap-2">
@@ -308,7 +302,7 @@ export function Upload() {
                   </Button>
                   <Button
                     onClick={handleFineNext}
-                    disabled={!fineDexEntryId}
+                    disabled={!fineItemName || fineItemName.trim() === ''}
                     className="flex-1"
                   >
                     Review & Submit
@@ -395,11 +389,11 @@ export function Upload() {
                 {selectedCoarseLabel?.name || 'Not selected'}
               </span>
             </div>
-            {selectedFineEntry && (
+            {fineItemName && (
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                 <span className="text-sm text-gray-600">Specific Item:</span>
                 <span className="font-semibold text-gray-900">
-                  {selectedFineEntry.fine_label}
+                  {fineItemName}
                 </span>
               </div>
             )}
