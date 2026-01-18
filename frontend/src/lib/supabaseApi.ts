@@ -379,7 +379,7 @@ export const supabaseApi = {
   },
 
   // Get leaderboard
-  async getLeaderboard(limit: number = 50): Promise<(UserStats & { profile: Profile })[]> {
+  async getLeaderboard(limit: number = 50, currentUserId?: string): Promise<(UserStats & { profile: Profile })[]> {
     // Fetch user_stats and profiles separately since there's no direct FK
     const { data: statsData, error: statsError } = await supabase
       .from('user_stats')
@@ -390,7 +390,26 @@ export const supabaseApi = {
     if (statsError) throw statsError;
     if (!statsData || statsData.length === 0) return [];
 
-    const userIds = statsData.map((s: any) => s.user_id);
+    // If current user is provided and not in top results, fetch their stats separately
+    const topUserIds = statsData.map((s: any) => s.user_id);
+    const currentUserInTop = currentUserId && topUserIds.includes(currentUserId);
+    
+    let allStatsData = [...statsData];
+    if (currentUserId && !currentUserInTop) {
+      const { data: currentUserStats, error: currentUserError } = await supabase
+        .from('user_stats')
+        .select('*')
+        .eq('user_id', currentUserId)
+        .maybeSingle();
+      
+      if (!currentUserError && currentUserStats) {
+        allStatsData.push(currentUserStats);
+        // Re-sort to maintain order
+        allStatsData.sort((a: any, b: any) => b.points - a.points);
+      }
+    }
+
+    const userIds = allStatsData.map((s: any) => s.user_id);
     const { data: profilesData, error: profilesError } = await supabase
       .from('profiles')
       .select('id, username, display_name')
@@ -400,7 +419,7 @@ export const supabaseApi = {
 
     const profilesMap = new Map((profilesData || []).map((p: any) => [p.id, p]));
 
-    return statsData.map((stat: any) => ({
+    return allStatsData.map((stat: any) => ({
       ...stat,
       profile: profilesMap.get(stat.user_id) || { id: stat.user_id, username: 'Unknown', display_name: 'Unknown User' },
     }));
