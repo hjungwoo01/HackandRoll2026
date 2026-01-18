@@ -111,13 +111,6 @@ export const mlApi = {
    * Returns true if both checks pass, false otherwise
    */
   async validateImage(submissionId: string): Promise<{ valid: boolean; reason?: string }> {
-    const mlEndpoint = import.meta.env.VITE_ML_ENDPOINT;
-
-    if (!mlEndpoint) {
-      console.warn('[ml] No ML endpoint configured, skipping validation');
-      return { valid: true }; // Skip validation if no endpoint
-    }
-
     try {
       // Get access token from Supabase
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -132,7 +125,7 @@ export const mlApi = {
 
       // Check 1: Foreground check
       console.log('[ml] running foreground-check for:', submissionId);
-      const foregroundResponse = await fetch(`${mlEndpoint}/foreground-check/${submissionId}`, {
+      const foregroundResponse = await fetch(`/api/proxy/foreground-check/${submissionId}`, {
         method: 'GET',
         headers,
       });
@@ -149,7 +142,7 @@ export const mlApi = {
 
       // Check 2: Recapture check
       console.log('[ml] running recapture-check for:', submissionId);
-      const recaptureResponse = await fetch(`${mlEndpoint}/recapture-check/${submissionId}`, {
+      const recaptureResponse = await fetch(`/api/proxy/recapture-check/${submissionId}`, {
         method: 'GET',
         headers,
       });
@@ -181,15 +174,6 @@ export const mlApi = {
     userId: string,
     labels: Array<{ id: number; name: string }>
   ): Promise<MLClassificationResponse> {
-    const verifyEndpoint = import.meta.env.VITE_ML_ENDPOINT;
-
-    // If no endpoint configured, use mock
-    if (!verifyEndpoint) {
-      console.log('[ml] No verification endpoint configured, using mock classifier');
-      console.log('[ml] request payload:', { submission_id: submissionId, user_id: userId });
-      return mockClassifier(submissionId, userId, labels);
-    }
-
     try {
       // Get access token from Supabase
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -205,7 +189,7 @@ export const mlApi = {
       console.log('[ml] calling vlm-verification for classification:', submissionId);
 
       // Call VLM verification endpoint without proposed_label to get classification
-      const response = await fetch(`${verifyEndpoint}/vlm-verification/${submissionId}`, {
+      const response = await fetch(`/api/proxy/vlm-verification/${submissionId}`, {
         method: 'GET',
         headers,
       });

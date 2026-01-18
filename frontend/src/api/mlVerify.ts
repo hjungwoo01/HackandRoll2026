@@ -74,23 +74,6 @@ export const mlVerifyApi = {
     fineDexEntryId: number | null,
     fineLabel: string | null
   ): Promise<MLVerificationResponse> {
-    const verifyEndpoint = import.meta.env.VITE_VERIFY_ML_ENDPOINT;
-
-    // If no endpoint configured, use mock
-    if (!verifyEndpoint) {
-      console.log('[verify] No verification endpoint configured, using mock verifier');
-      const payload: MLVerificationRequest = {
-        submission_id: submissionId,
-        user_id: userId,
-        fine_dex_entry_id: fineDexEntryId,
-        fine_label: fineLabel,
-      };
-      console.log('[verify] request payload:', payload);
-      const result = await mockVerifier(submissionId, userId, fineDexEntryId, fineLabel);
-      console.log('[verify] response:', result);
-      return result;
-    }
-
     try {
       // Get access token from Supabase
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -120,7 +103,7 @@ export const mlVerifyApi = {
 
       // Call VLM verification endpoint with proposed_label for verification
       const response = await fetch(
-        `${verifyEndpoint}/vlm-verification/${submissionId}?proposed_label=${encodeURIComponent(fineLabel || '')}`,
+        `/api/proxy/vlm-verification/${submissionId}?proposed_label=${encodeURIComponent(fineLabel || '')}`,
         {
           method: 'GET',
           headers: {
