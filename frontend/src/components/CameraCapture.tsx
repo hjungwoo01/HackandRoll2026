@@ -25,30 +25,147 @@ export function CameraCapture({ onCapture, capturedImage, disabled }: CameraCapt
     };
   }, [stream]);
 
+  // Handle video sizing on load and resize
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !stream) return;
+
+    const updateVideoSize = () => {
+      if (video.videoWidth && video.videoHeight) {
+        // Ensure video fits container
+        video.style.width = '100%';
+        video.style.height = 'auto';
+        video.style.objectFit = 'contain';
+      }
+    };
+
+    const handleOrientationChange = () => {
+      setTimeout(updateVideoSize, 100);
+    };
+
+    video.addEventListener('loadedmetadata', updateVideoSize);
+    video.addEventListener('resize', updateVideoSize);
+    window.addEventListener('resize', updateVideoSize);
+    window.addEventListener('orientationchange', handleOrientationChange);
+
+    // Initial sizing
+    updateVideoSize();
+
+    return () => {
+      video.removeEventListener('loadedmetadata', updateVideoSize);
+      video.removeEventListener('resize', updateVideoSize);
+      window.removeEventListener('resize', updateVideoSize);
+      window.removeEventListener('orientationchange', handleOrientationChange);
+    };
+  }, [stream]);
+
   const startCamera = async () => {
     setError(null);
     setIsInitializing(true);
 
     try {
+      // Debug logging for production troubleshooting
+      console.log('Camera initialization:', {
+        isSecureContext: window.isSecureContext,
+        protocol: window.location.protocol,
+        hostname: window.location.hostname,
+        hasMediaDevices: !!navigator.mediaDevices,
+        hasGetUserMedia: !!(navigator.mediaDevices?.getUserMedia),
+      });
+
+      // Check if we're in a secure context (HTTPS required for camera access)
+      if (!window.isSecureContext) {
+        const protocol = window.location.protocol;
+        const errorMsg = `Camera access requires HTTPS. Current protocol: ${protocol}. Please access this site over a secure connection (https://).`;
+        console.error('Camera error - Not secure context:', errorMsg);
+        setError(errorMsg);
+        setIsInitializing(false);
+        return;
+      }
+
+      // Check if mediaDevices API is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        const errorMsg = 'Camera API is not available in this browser. Please use a modern browser with camera support.';
+        console.error('Camera error - API not available:', errorMsg);
+        setError(errorMsg);
+        setIsInitializing(false);
+        return;
+      }
+
+      // Mobile-friendly constraints - use device capabilities
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const videoConstraints: MediaTrackConstraints = isMobile
+        ? {
+            facingMode: 'environment', // Prefer back camera on mobile
+            // Let the device choose the best resolution for mobile
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          }
+        : {
+            facingMode: 'environment',
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          };
+
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment', // Prefer back camera on mobile
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
+        video: videoConstraints,
       });
 
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+        // Wait for video metadata to ensure proper sizing
+        videoRef.current.addEventListener('loadedmetadata', () => {
+          if (videoRef.current) {
+            // Force video to fit container
+            videoRef.current.style.width = '100%';
+            videoRef.current.style.height = 'auto';
+            videoRef.current.style.objectFit = 'contain';
+          }
+        }, { once: true });
       }
       setIsInitializing(false);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to access camera. Please ensure you have granted camera permissions.'
-      );
+    } catch (err: any) {
+      let errorMessage = 'Failed to access camera. Please ensure you have granted camera permissions.';
+      
+      if (err instanceof Error) {
+        // Handle specific error types
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          errorMessage = 'Camera permission denied. Please allow camera access in your browser settings and try again.';
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+          errorMessage = 'No camera found. Please connect a camera device and try again.';
+        } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+          errorMessage = 'Camera is already in use by another application. Please close other apps using the camera and try again.';
+        } else if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
+          errorMessage = 'Camera does not support the required settings. Trying with default settings...';
+          // Retry with simpler constraints
+          try {
+            const mediaStream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+            });
+            setStream(mediaStream);
+            if (videoRef.current) {
+              videoRef.current.srcObject = mediaStream;
+            }
+            setIsInitializing(false);
+            return;
+          } catch (retryErr) {
+            errorMessage = err.message || errorMessage;
+          }
+        } else if (err.name === 'SecurityError') {
+          errorMessage = 'Camera access blocked for security reasons. Please ensure you are using HTTPS.';
+        } else {
+          errorMessage = err.message || errorMessage;
+        }
+      }
+      
+      console.error('Camera error:', {
+        error: err,
+        name: err instanceof Error ? err.name : 'Unknown',
+        message: err instanceof Error ? err.message : String(err),
+        errorMessage,
+      });
+      setError(errorMessage);
       setIsInitializing(false);
     }
   };
@@ -116,11 +233,22 @@ export function CameraCapture({ onCapture, capturedImage, disabled }: CameraCapt
   if (capturedImage) {
     return (
       <div className="space-y-4">
-        <div className="relative aspect-video bg-gray-100 rounded-lg overflow-hidden">
+        <div 
+          className="relative w-full bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center"
+          style={{
+            maxHeight: 'calc(100vh - 300px)',
+            minHeight: '250px',
+          }}
+        >
           <img
             src={capturedImage}
             alt="Captured photo"
-            className="w-full h-full object-contain"
+            className="w-full h-auto"
+            style={{
+              objectFit: 'contain',
+              maxHeight: 'calc(100vh - 300px)',
+              maxWidth: '100%',
+            }}
           />
         </div>
         <button
@@ -135,6 +263,9 @@ export function CameraCapture({ onCapture, capturedImage, disabled }: CameraCapt
   }
 
   if (error) {
+    const isHttpsError = error.includes('HTTPS') || error.includes('secure connection');
+    const isPermissionError = error.includes('permission') || error.includes('denied');
+    
     return (
       <Card>
         <CardContent className="p-8 text-center">
@@ -147,12 +278,24 @@ export function CameraCapture({ onCapture, capturedImage, disabled }: CameraCapt
             <div>
               <div className="font-medium text-red-700 mb-2">Camera Access Required</div>
               <div className="text-sm text-red-600 mb-4">{error}</div>
+              {isHttpsError && (
+                <div className="text-xs text-gray-500 mt-2 p-3 bg-gray-50 rounded">
+                  <strong>Note:</strong> Modern browsers require HTTPS for camera access. 
+                  If you're seeing this on a deployed site, contact the site administrator to ensure HTTPS is enabled.
+                </div>
+              )}
+              {isPermissionError && (
+                <div className="text-xs text-gray-500 mt-2 p-3 bg-gray-50 rounded">
+                  <strong>How to fix:</strong> Look for a camera icon in your browser's address bar, 
+                  or go to your browser settings to allow camera access for this site.
+                </div>
+              )}
             </div>
             <Button
               onClick={startCamera}
               disabled={disabled || isInitializing}
             >
-              {isInitializing ? 'Initializing...' : 'Enable Camera'}
+              {isInitializing ? 'Initializing...' : 'Try Again'}
             </Button>
           </div>
         </CardContent>
@@ -190,9 +333,16 @@ export function CameraCapture({ onCapture, capturedImage, disabled }: CameraCapt
 
   return (
     <div className="space-y-4">
-      <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
+      <div 
+        className="relative w-full bg-black rounded-lg overflow-hidden flex items-center justify-center"
+        style={{ 
+          maxHeight: 'calc(100vh - 300px)',
+          minHeight: '250px',
+          height: 'auto',
+        }}
+      >
         {isInitializing ? (
-          <div className="absolute inset-0 flex items-center justify-center">
+          <div className="absolute inset-0 flex items-center justify-center" style={{ minHeight: '250px' }}>
             <div className="text-center text-white">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white mb-2"></div>
               <div className="text-sm">Starting camera...</div>
@@ -204,7 +354,14 @@ export function CameraCapture({ onCapture, capturedImage, disabled }: CameraCapt
             autoPlay
             playsInline
             muted
-            className="w-full h-full object-cover"
+            className="w-full"
+            style={{
+              objectFit: 'contain',
+              maxHeight: 'calc(100vh - 300px)',
+              maxWidth: '100%',
+              height: 'auto',
+              display: 'block',
+            }}
           />
         )}
       </div>
