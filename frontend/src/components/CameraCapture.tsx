@@ -15,6 +15,7 @@ export function CameraCapture({ onCapture, capturedImage, disabled }: CameraCapt
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
+  const [needsUserInteraction, setNeedsUserInteraction] = useState(false);
 
   useEffect(() => {
     // Cleanup stream on unmount
@@ -25,7 +26,7 @@ export function CameraCapture({ onCapture, capturedImage, disabled }: CameraCapt
     };
   }, [stream]);
 
-  // Handle video sizing on load and resize
+  // Handle video sizing on load and resize, and ensure it plays
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !stream) return;
@@ -37,23 +38,53 @@ export function CameraCapture({ onCapture, capturedImage, disabled }: CameraCapt
         video.style.height = 'auto';
         video.style.objectFit = 'contain';
       }
+      // Ensure video is playing
+      if (video.paused && video.readyState >= 2) {
+        video.play().catch((err) => {
+          console.warn('Auto-play prevented, user interaction required:', err);
+        });
+      }
     };
 
     const handleOrientationChange = () => {
-      setTimeout(updateVideoSize, 100);
+      setTimeout(() => {
+        updateVideoSize();
+        // Replay after orientation change
+        if (video && video.paused && video.srcObject) {
+          video.play().catch((err) => console.warn('Play after orientation change failed:', err));
+        }
+      }, 100);
+    };
+
+    const handlePlay = () => {
+      console.log('Video started playing');
+    };
+
+    const handlePause = () => {
+      console.warn('Video was paused, attempting to resume...');
+      // Try to resume if paused unexpectedly
+      if (video.srcObject && !video.ended) {
+        setTimeout(() => {
+          video.play().catch((err) => console.warn('Resume failed:', err));
+        }, 100);
+      }
     };
 
     video.addEventListener('loadedmetadata', updateVideoSize);
     video.addEventListener('resize', updateVideoSize);
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
     window.addEventListener('resize', updateVideoSize);
     window.addEventListener('orientationchange', handleOrientationChange);
 
-    // Initial sizing
+    // Initial sizing and play attempt
     updateVideoSize();
 
     return () => {
       video.removeEventListener('loadedmetadata', updateVideoSize);
       video.removeEventListener('resize', updateVideoSize);
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
       window.removeEventListener('resize', updateVideoSize);
       window.removeEventListener('orientationchange', handleOrientationChange);
     };
@@ -65,13 +96,21 @@ export function CameraCapture({ onCapture, capturedImage, disabled }: CameraCapt
 
     try {
       // Debug logging for production troubleshooting
-      console.log('Camera initialization:', {
+      const debugInfo = {
         isSecureContext: window.isSecureContext,
         protocol: window.location.protocol,
         hostname: window.location.hostname,
         hasMediaDevices: !!navigator.mediaDevices,
         hasGetUserMedia: !!(navigator.mediaDevices?.getUserMedia),
-      });
+        userAgent: navigator.userAgent,
+        isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent),
+      };
+      console.log('Camera initialization:', debugInfo);
+      
+      // Additional check for deployment
+      if (window.location.protocol === 'http:' && !window.location.hostname.includes('localhost')) {
+        console.warn('WARNING: Site is not using HTTPS. Camera access may be blocked.');
+      }
 
       // Check if we're in a secure context (HTTPS required for camera access)
       if (!window.isSecureContext) {
@@ -113,14 +152,50 @@ export function CameraCapture({ onCapture, capturedImage, disabled }: CameraCapt
 
       setStream(mediaStream);
       if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
+        const video = videoRef.current;
+        video.srcObject = mediaStream;
+        
+        // Explicitly play the video (required for mobile browsers)
+        const playPromise = video.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              console.log('Video playing successfully');
+            })
+            .catch((playError) => {
+              console.error('Error playing video:', playError);
+              // Autoplay was blocked - show message to user
+              setNeedsUserInteraction(true);
+              // Try to play again after a short delay
+              setTimeout(() => {
+                if (video && video.srcObject) {
+                  video.play().catch((err) => {
+                    console.error('Retry play failed:', err);
+                    setNeedsUserInteraction(true);
+                  });
+                }
+              }, 100);
+            });
+        }
+        
         // Wait for video metadata to ensure proper sizing
-        videoRef.current.addEventListener('loadedmetadata', () => {
-          if (videoRef.current) {
+        video.addEventListener('loadedmetadata', () => {
+          if (video) {
             // Force video to fit container
-            videoRef.current.style.width = '100%';
-            videoRef.current.style.height = 'auto';
-            videoRef.current.style.objectFit = 'contain';
+            video.style.width = '100%';
+            video.style.height = 'auto';
+            video.style.objectFit = 'contain';
+            // Ensure it's playing
+            if (video.paused) {
+              video.play().catch((err) => console.error('Play on loadedmetadata failed:', err));
+            }
+          }
+        }, { once: true });
+        
+        // Also handle when video is ready to play
+        video.addEventListener('loadeddata', () => {
+          if (video && video.paused) {
+            video.play().catch((err) => console.error('Play on loadeddata failed:', err));
           }
         }, { once: true });
       }
@@ -349,22 +424,54 @@ export function CameraCapture({ onCapture, capturedImage, disabled }: CameraCapt
             </div>
           </div>
         ) : (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full"
-            style={{
-              objectFit: 'contain',
-              maxHeight: 'calc(100vh - 300px)',
-              maxWidth: '100%',
-              height: 'auto',
-              display: 'block',
-            }}
-          />
+          <div className="relative w-full">
+            {needsUserInteraction && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-black bg-opacity-50 rounded-lg">
+                <div className="text-center text-white p-4">
+                  <div className="text-lg font-medium mb-2">Tap to Start Camera</div>
+                  <div className="text-sm opacity-90">Your browser requires interaction to start the camera</div>
+                </div>
+              </div>
+            )}
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full"
+              style={{
+                objectFit: 'contain',
+                maxHeight: 'calc(100vh - 300px)',
+                maxWidth: '100%',
+                height: 'auto',
+                display: 'block',
+                cursor: needsUserInteraction ? 'pointer' : 'default',
+              }}
+              onClick={async (e) => {
+                // Allow user to tap to play if autoplay was blocked
+                const video = e.currentTarget;
+                if (video.paused && video.srcObject) {
+                  try {
+                    await video.play();
+                    setNeedsUserInteraction(false);
+                    console.log('Video started via user interaction');
+                  } catch (err) {
+                    console.error('Manual play failed:', err);
+                    setError('Unable to play video. Please check camera permissions and try again.');
+                  }
+                }
+              }}
+            />
+          </div>
         )}
       </div>
+      {needsUserInteraction && stream && !isInitializing && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-2">
+          <p className="text-sm text-yellow-800 text-center">
+            Tap the video above to start the camera, then capture your photo.
+          </p>
+        </div>
+      )}
       {stream && !isInitializing && (
         <Button
           onClick={capturePhoto}
