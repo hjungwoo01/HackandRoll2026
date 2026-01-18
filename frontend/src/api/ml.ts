@@ -181,7 +181,7 @@ export const mlApi = {
     userId: string,
     labels: Array<{ id: number; name: string }>
   ): Promise<MLClassificationResponse> {
-    const verifyEndpoint = import.meta.env.VITE_VERIFY_ML_ENDPOINT;
+    const verifyEndpoint = import.meta.env.VITE_ML_ENDPOINT;
 
     // If no endpoint configured, use mock
     if (!verifyEndpoint) {
