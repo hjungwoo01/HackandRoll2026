@@ -11,7 +11,11 @@
       "headers": [
         {
           "key": "Permissions-Policy",
-          "value": "camera=(self)"
+          "value": "camera=(self), microphone=()"
+        },
+        {
+          "key": "Feature-Policy",
+          "value": "camera 'self'"
         }
       ]
     }
