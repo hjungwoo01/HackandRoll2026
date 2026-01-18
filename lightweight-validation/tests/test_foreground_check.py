@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from app import app
+from HackandRoll2026.vlm_verification.app import app
 
 
 ASSETS_DIR = Path(__file__).resolve().parents[1] / "assets" / "foreground-check"

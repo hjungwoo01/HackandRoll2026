@@ -1,128 +1,259 @@
-import { useEffect, useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useStore } from '../state/store';
+import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { PageHeader } from '../components/PageHeader';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
+import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Progress } from '../components/ui/progress';
-import { StatusBadge } from '../components/StatusBadge';
-import { EmptyState } from '../components/EmptyState';
-import { StatCard } from '../components/StatCard';
-import { BadgeCard } from '../components/BadgeCard';
-import { BadgeUnlockModal } from '../components/BadgeUnlockModal';
-import { formatTimeAgo } from '../utils/formatting';
-import { BookOpen, Target, Upload, CheckCircle2, TrendingUp, Clock, Award } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Input } from '../components/ui/input';
+import { Button } from '../components/ui/button';
+import { EntryDetailModal } from '../components/EntryDetailModal';
+import { supabaseDex, type DexVersion, type DexEntry, type UserDexEntry } from '../lib/supabaseDex';
 import { supabase } from '../lib/supabaseClient';
+import { rarityToSet, getSetColor } from '../utils/sanitizeCopy';
+import { BookOpen, Search, Lock, Grid, List, Trophy } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
+import confetti from 'canvas-confetti';
 
 export function Collection() {
-  const navigate = useNavigate();
   const { user } = useAuth();
-  const {
-    labels,
-    userSubmissions,
-    fetchUserSubmissions,
-    badges,
-    earnedBadges,
-    fetchLabels,
-    fetchBadges,
-    fetchUserBadges,
-  } = useStore();
-  const [unlockedBadge, setUnlockedBadge] = useState<any | null>(null);
-  const [stats, setStats] = useState<any>(null);
+  const [versions, setVersions] = useState<DexVersion[]>([]);
+  const [selectedVersion, setSelectedVersion] = useState<string>('v0');
+  const [entries, setEntries] = useState<DexEntry[]>([]);
+  const [userEntries, setUserEntries] = useState<UserDexEntry[]>([]);
+  const [unlockedVersions, setUnlockedVersions] = useState<Set<string>>(new Set(['v0']));
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [selectedSet, setSelectedSet] = useState<'common' | 'rare' | 'epic' | null>(null);
+  const [showOwnedOnly, setShowOwnedOnly] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<DexEntry | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [v0Completion, setV0Completion] = useState(0);
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
 
+  // Load data
   useEffect(() => {
     if (user) {
-      const loadData = async () => {
-        setLoading(true);
-        try {
-          await Promise.all([
-            fetchLabels(),
-            fetchUserSubmissions(user.id),
-            fetchBadges(),
-            fetchUserBadges(user.id),
-          ]);
-          
-          // Fetch user stats
-          const { data, error } = await supabase
-            .from('user_stats')
-            .select('*')
-            .eq('user_id', user.id)
-            .single();
-          
-          if (error) {
-            console.error('Error fetching user stats:', error);
-            // Set default stats if not found
-            setStats({ points: 0, uploads_count: 0, likes_received: 0 });
-          } else {
-            setStats(data || { points: 0, uploads_count: 0, likes_received: 0 });
-          }
-        } catch (error) {
-          console.error('Error loading collection data:', error);
-        } finally {
-          setLoading(false);
-        }
-      };
-      
       loadData();
     }
-  }, [user?.id]); // Only depend on user.id to avoid infinite loops
+  }, [user, selectedVersion]);
 
-  // Accepted submissions: not flagged or rejected
-  const acceptedSubmissions = userSubmissions.filter(
-    (s) => s.status !== 'flagged' && s.status !== 'rejected'
-  );
-  const acceptedCount = acceptedSubmissions.length;
-  const pendingCount = userSubmissions.filter((s) => s.status === 'active').length;
-  const progress = labels.length > 0 ? (acceptedCount / labels.length) * 100 : 0;
+  const loadData = async () => {
+    setLoading(true);
+    // Clear featured images when loading new data
+    setFeaturedImageUrls(new Map());
+    try {
+      const [versionsData, entriesData, userEntriesData, unlocksData, completion] = await Promise.all([
+        supabaseDex.getDexVersions(),
+        supabaseDex.getDexEntries(selectedVersion),
+        user ? supabaseDex.getUserDexEntries(user.id, selectedVersion) : Promise.resolve([]),
+        user ? supabaseDex.getUserUnlocks(user.id) : Promise.resolve([]),
+        user ? supabaseDex.getV0Completion(user.id) : Promise.resolve(0),
+      ]);
 
-  const acceptedLabelIds = new Set(
-    acceptedSubmissions.map((s) => s.label_id)
-  );
+      setVersions(versionsData);
+      setEntries(entriesData);
+      setUserEntries(userEntriesData);
+      setV0Completion(completion);
 
-  // Stats loaded from user_stats table
+      const unlocked = new Set(['v0', ...unlocksData.map((u) => u.dex_version_id)]);
+      setUnlockedVersions(unlocked);
 
-  // Check for newly unlocked badges
-  const previousEarnedIdsRef = useRef<Set<string>>(new Set());
-  
-  useEffect(() => {
-    const currentIds = new Set(earnedBadges.map((b) => b.id));
-    const currentIdsArray = Array.from(currentIds).sort();
-    const previousIdsArray = Array.from(previousEarnedIdsRef.current).sort();
-    
-    // Only check if the arrays are different (avoid infinite loop)
-    const idsChanged = currentIdsArray.length !== previousIdsArray.length || 
-        currentIdsArray.some((id, idx) => id !== previousIdsArray[idx]);
-    
-    if (idsChanged) {
-      const newBadgeIds = currentIdsArray.filter((id) => !previousEarnedIdsRef.current.has(id));
-      
-      if (newBadgeIds.length > 0) {
-        // New badge(s) earned - show the first one
-        const newBadge = earnedBadges.find((b) => b.id === newBadgeIds[0]);
-        if (newBadge) {
-          setUnlockedBadge(newBadge);
-        }
+      // Check if V1 should be unlocked
+      if (completion >= 30 && !unlocked.has('v1') && user) {
+        await supabaseDex.unlockDexVersion(user.id, 'v1');
+        setUnlockedVersions(new Set(['v0', 'v1']));
+        setShowUnlockModal(true);
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 },
+        });
       }
-      previousEarnedIdsRef.current = currentIds;
+    } catch (error) {
+      console.error('Error loading collection:', error);
+      toast.error('Failed to load collection');
+    } finally {
+      setLoading(false);
     }
-  }, [earnedBadges]);
-
-  const getLabelName = (labelId: number) => {
-    return labels.find((l) => l.id === labelId)?.name || 'Unknown';
   };
 
-  // Missions simplified for now
+  // Filter entries
+  const filteredEntries = useMemo(() => {
+    let filtered = entries;
+
+    // Search
+    if (searchQuery) {
+      filtered = filtered.filter((e) =>
+        e.fine_label.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    // Category
+    if (selectedCategory) {
+      filtered = filtered.filter((e) => e.coarse_label_id === selectedCategory);
+    }
+
+    // Set filter
+    if (selectedSet) {
+      filtered = filtered.filter((e) => e.rarity === selectedSet);
+    }
+
+    // Owned only
+    if (showOwnedOnly && user) {
+      const ownedIds = new Set(userEntries.map((ue) => ue.dex_entry_id));
+      filtered = filtered.filter((e) => ownedIds.has(e.id));
+    }
+
+    return filtered;
+  }, [entries, searchQuery, selectedCategory, selectedSet, showOwnedOnly, userEntries]);
+
+  // Get categories
+  const categories = useMemo(() => {
+    const categoryMap = new Map<number, string>();
+    entries.forEach((e) => {
+      if (e.coarse_label_id && e.coarse_label_name) {
+        categoryMap.set(e.coarse_label_id, e.coarse_label_name);
+      }
+    });
+    return Array.from(categoryMap.entries()).map(([id, name]) => ({ id, name }));
+  }, [entries]);
+
+  // Get completion stats
+  const completionStats = useMemo(() => {
+    const ownedIds = new Set(userEntries.map((ue) => ue.dex_entry_id));
+    const owned = entries.filter((e) => ownedIds.has(e.id)).length;
+    const total = entries.length;
+    const percentage = total > 0 ? Math.round((owned / total) * 100) : 0;
+
+    return { owned, total, percentage };
+  }, [entries, userEntries]);
+
+  // Get user entry for a dex entry
+  const getUserEntry = (entryId: number): UserDexEntry | null => {
+    return userEntries.find((ue) => ue.dex_entry_id === entryId) || null;
+  };
+
+  // Get featured image URL from submission
+  const getFeaturedImageUrl = (entry: DexEntry): string | null => {
+    const userEntry = getUserEntry(entry.id);
+    if (!userEntry?.featured_submission_id) return null;
+    
+    // Construct public URL from submission path
+    // The image_path in submissions is like: {userId}/{submissionId}.jpg
+    // We need to get the full submission to access image_path
+    // For now, we'll fetch it when needed, but store it in state
+    return null; // Will be loaded via useEffect below
+  };
+
+  // State for featured image URLs
+  const [featuredImageUrls, setFeaturedImageUrls] = useState<Map<number, string>>(new Map());
+
+  // Load featured images for owned entries
+  useEffect(() => {
+    if (!user || userEntries.length === 0) {
+      setFeaturedImageUrls(new Map());
+      return;
+    }
+
+    const loadFeaturedImages = async () => {
+      const imageMap = new Map<number, string>();
+      
+      // Get all featured submission IDs
+      const featuredSubmissionIds = userEntries
+        .filter(ue => ue.featured_submission_id)
+        .map(ue => ue.featured_submission_id!);
+
+      console.log('Loading featured images for', featuredSubmissionIds.length, 'submissions');
+      console.log('User entries:', userEntries.map(ue => ({ 
+        dex_entry_id: ue.dex_entry_id, 
+        featured_submission_id: ue.featured_submission_id 
+      })));
+
+      if (featuredSubmissionIds.length === 0) {
+        // Fallback: try to load images from user's submissions for these entries
+        console.log('No featured submissions found, trying fallback...');
+        const dexEntryIds = userEntries.map(ue => ue.dex_entry_id);
+        
+        const { data: fallbackSubmissions, error: fallbackError } = await supabase
+          .from('submissions')
+          .select('id, image_path, fine_dex_entry_id')
+          .eq('uploader_id', user.id)
+          .in('fine_dex_entry_id', dexEntryIds)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false });
+
+        if (!fallbackError && fallbackSubmissions) {
+          // Group by dex_entry_id and take the most recent one
+          const submissionsByEntry = new Map<number, typeof fallbackSubmissions[0]>();
+          fallbackSubmissions.forEach(sub => {
+            if (sub.fine_dex_entry_id && !submissionsByEntry.has(sub.fine_dex_entry_id)) {
+              submissionsByEntry.set(sub.fine_dex_entry_id, sub);
+            }
+          });
+
+          submissionsByEntry.forEach((submission, dexEntryId) => {
+            if (submission.image_path) {
+              const { data } = supabase.storage
+                .from('submissions')
+                .getPublicUrl(submission.image_path);
+              imageMap.set(dexEntryId, data.publicUrl);
+            }
+          });
+        }
+        
+        setFeaturedImageUrls(imageMap);
+        return;
+      }
+
+      // Fetch submissions to get image_path
+      const { data: submissions, error } = await supabase
+        .from('submissions')
+        .select('id, image_path, fine_dex_entry_id')
+        .in('id', featuredSubmissionIds);
+
+      if (error) {
+        console.error('Error loading featured images:', error);
+        setFeaturedImageUrls(new Map());
+        return;
+      }
+
+      console.log('Loaded', submissions?.length || 0, 'submissions');
+
+      // Map submission IDs to dex entry IDs and construct URLs
+      submissions?.forEach(submission => {
+        const userEntry = userEntries.find(ue => ue.featured_submission_id === submission.id);
+        if (userEntry && submission.image_path) {
+          const { data } = supabase.storage
+            .from('submissions')
+            .getPublicUrl(submission.image_path);
+          console.log(`Setting image for entry ${userEntry.dex_entry_id}: ${data.publicUrl}`);
+          imageMap.set(userEntry.dex_entry_id, data.publicUrl);
+        } else {
+          console.log('Missing userEntry or image_path for submission', submission.id, {
+            userEntry: !!userEntry,
+            image_path: !!submission.image_path
+          });
+        }
+      });
+
+      console.log('Final image map size:', imageMap.size);
+      setFeaturedImageUrls(imageMap);
+    };
+
+    loadFeaturedImages();
+  }, [user, userEntries, selectedVersion]);
+
+  const isVersionLocked = (versionId: string) => {
+    return !unlockedVersions.has(versionId);
+  };
 
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <PageHeader
-          title="Your RareDex"
-          subtitle="Track your collection and achievements"
-        />
+        <PageHeader title="Your RareDex" subtitle="Track your collection and achievements" />
         <div className="text-center py-12">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
           <p className="mt-4 text-gray-600">Loading your collection...</p>
@@ -133,208 +264,238 @@ export function Collection() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <PageHeader
-        title="Your RareDex"
-        subtitle="Track your collection and achievements"
-      />
+      {/* Header */}
+      <div className="mb-6">
+        <PageHeader title="Your RareDex" subtitle="Track your collection and achievements" />
+        
+        {/* Version Selector */}
+        <div className="mt-4">
+          <Tabs value={selectedVersion} onValueChange={setSelectedVersion}>
+            <TabsList>
+              {versions.map((version) => {
+                const locked = isVersionLocked(version.id);
+                return (
+                  <TabsTrigger
+                    key={version.id}
+                    value={version.id}
+                    disabled={locked}
+                    className="flex items-center gap-2"
+                  >
+                    {locked && <Lock className="h-4 w-4" />}
+                    {version.name}
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          </Tabs>
+        </div>
 
-      {/* Stats Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <StatCard
-          icon={BookOpen}
-          label="Collected"
-          value={`${acceptedCount} / ${labels.length}`}
-        />
-        <StatCard
-          icon={Clock}
-          label="Pending"
-          value={pendingCount}
-          iconColor="text-yellow-600"
-        />
-        <StatCard
-          icon={TrendingUp}
-          label="Points"
-          value={stats?.points || 0}
-          iconColor="text-green-600"
-        />
+        {/* Stats and Filters */}
+        <div className="mt-6 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-gray-600">
+              <span className="font-semibold text-gray-900">{completionStats.owned}</span> /{' '}
+              {completionStats.total} • {completionStats.percentage}%
+            </div>
+            <Progress value={completionStats.percentage} className="w-32 h-2" />
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search entries..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 w-64"
+              />
+            </div>
+            <select
+              value={selectedCategory || ''}
+              onChange={(e) => setSelectedCategory(e.target.value ? Number(e.target.value) : null)}
+              className="px-3 py-2 border rounded-md text-sm"
+            >
+              <option value="">All Categories</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={selectedSet || ''}
+              onChange={(e) =>
+                setSelectedSet(
+                  e.target.value ? (e.target.value as 'common' | 'rare' | 'epic') : null
+                )
+              }
+              className="px-3 py-2 border rounded-md text-sm"
+            >
+              <option value="">All Sets</option>
+              <option value="common">Set A</option>
+              <option value="rare">Set B</option>
+              <option value="epic">Set C</option>
+            </select>
+            <Button
+              variant={showOwnedOnly ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setShowOwnedOnly(!showOwnedOnly)}
+            >
+              Owned Only
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+            >
+              {viewMode === 'grid' ? <List className="h-4 w-4" /> : <Grid className="h-4 w-4" />}
+            </Button>
+          </div>
+        </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Collection Book */}
-        <div className="lg:col-span-2 space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Collection Book</CardTitle>
-                  <CardDescription>
-                    Unlock categories by getting items accepted
-                  </CardDescription>
+      {/* V1 Unlock Progress */}
+      {selectedVersion === 'v0' && v0Completion < 30 && (
+        <Card className="mb-6 bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Lock className="h-5 w-5 text-purple-600" />
+                  <span className="font-semibold text-gray-900">New Pages open at 30% completion</span>
                 </div>
-                <Badge variant="secondary">
-                  {Math.round(progress)}% complete
-                </Badge>
+                <p className="text-sm text-gray-600">
+                  Complete {Math.ceil(((30 - v0Completion) / 100) * entries.length)} more entries to
+                  unlock new pages
+                </p>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-4">
-                <Progress value={progress} className="h-3" />
+              <div className="text-right">
+                <div className="text-2xl font-bold text-purple-600">{Math.round(v0Completion)}%</div>
+                <Progress value={v0Completion} max={30} className="w-32 h-2 mt-2" />
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {labels.map((label, index) => {
-                  const isCollected = acceptedLabelIds.has(label.id);
-                  const userSubmission = acceptedSubmissions.find(
-                    (s) => s.label_id === label.id
-                  );
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-                  return (
-                    <motion.div
-                      key={label.id}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: index * 0.02 }}
-                    >
-                      <div
-                        className={`
-                          aspect-square rounded-2xl border-2 p-4 flex flex-col items-center justify-center
-                          transition-all relative overflow-hidden
-                          ${
-                            isCollected
-                              ? 'bg-gradient-to-br from-primary-100 to-primary-200 border-primary-400 shadow-md'
-                              : 'bg-gray-50 border-gray-200'
-                          }
-                        `}
-                      >
-                        {isCollected ? (
-                          <>
-                            {userSubmission && (
-                              <div className="absolute inset-0 opacity-20">
-                                <img
-                                  src={supabase.storage.from('submissions').getPublicUrl(userSubmission.image_path).data.publicUrl}
-                                  alt=""
-                                  className="w-full h-full object-cover"
-                                />
-                              </div>
+      {/* Entries Grid */}
+      {filteredEntries.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-gray-600">No entries found. Try clearing filters.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div
+          className={
+            viewMode === 'grid'
+              ? 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4'
+              : 'space-y-2'
+          }
+        >
+          <AnimatePresence>
+            {filteredEntries.map((entry, index) => {
+              const userEntry = getUserEntry(entry.id);
+              const isOwned = !!userEntry;
+
+              return (
+                <motion.div
+                  key={entry.id}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ delay: index * 0.02 }}
+                >
+                  <Card
+                    className={`cursor-pointer hover:shadow-lg transition-all ${
+                      isOwned ? getSetColor(entry.rarity) : 'border-gray-200 bg-gray-50'
+                    }`}
+                    onClick={() => setSelectedEntry(entry)}
+                  >
+                    <CardContent className="p-4 aspect-square flex flex-col items-center justify-center relative overflow-hidden">
+                      {isOwned ? (
+                        <>
+                          {featuredImageUrls.get(entry.id) ? (
+                            <img
+                              src={featuredImageUrls.get(entry.id)!}
+                              alt={entry.fine_label}
+                              className="w-full h-full object-cover rounded-lg"
+                              onError={(e) => {
+                                // Fallback to placeholder if image fails to load
+                                e.currentTarget.style.display = 'none';
+                                const placeholder = e.currentTarget.parentElement?.querySelector('.placeholder');
+                                if (placeholder) (placeholder as HTMLElement).style.display = 'flex';
+                              }}
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg flex items-center justify-center placeholder">
+                              <BookOpen className="h-12 w-12 text-primary-600" />
+                            </div>
+                          )}
+                          <div className="absolute bottom-2 left-2 right-2 space-y-1 bg-black/60 backdrop-blur-sm rounded px-2 py-1">
+                            <Badge variant="secondary" className="w-full justify-center text-xs truncate bg-white/90">
+                              {entry.fine_label}
+                            </Badge>
+                            {userEntry?.acquired_at && (
+                              <p className="text-xs text-white text-center">
+                                Spotted {new Date(userEntry.acquired_at).toLocaleDateString()}
+                              </p>
                             )}
-                            <div className="relative z-10 text-center">
-                              <CheckCircle2 className="h-8 w-8 text-primary-700 mb-2 mx-auto" />
-                              <div className="text-xs font-semibold text-primary-900 text-center leading-tight">
-                                {label.name}
-                              </div>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="text-center">
-                            <div className="text-3xl mb-2 opacity-30">?</div>
-                            <div className="text-xs font-medium text-center text-gray-400 leading-tight">
-                              {label.name}
-                            </div>
                           </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Badge Case */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Award className="h-5 w-5 text-primary-600" />
-                Badge Case
-              </CardTitle>
-              <CardDescription>
-                Your Badge Case tracks what you've truly contributed
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {badges.map((badge) => {
-                  const earned = earnedBadges.some((b) => b.id === badge.id);
-                  return (
-                    <BadgeCard key={badge.id} badge={badge} earned={earned} />
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Recent Activity */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-              <CardDescription>Your latest submissions and updates</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {userSubmissions.length === 0 ? (
-                <EmptyState
-                  icon={Upload}
-                  title="No submissions yet"
-                  description="Start building your collection by adding items to RareDex"
-                  action={{
-                    label: 'Add to RareDex',
-                    onClick: () => navigate('/upload'),
-                  }}
-                />
-              ) : (
-                <div className="space-y-3">
-                  {userSubmissions.slice(0, 5).map((submission) => (
-                    <div
-                      key={submission.id}
-                      className="flex items-center gap-4 p-4 rounded-xl hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                        <img
-                          src={supabase.storage.from('submissions').getPublicUrl(submission.image_path).data.publicUrl}
-                          alt="Submission"
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-medium text-gray-900 truncate">
-                            {getLabelName(submission.label_id)}
-                          </span>
-                          <StatusBadge status={submission.status as any} />
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {formatTimeAgo(submission.created_at)}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                        </>
+                      ) : (
+                        <>
+                          <div className="text-4xl mb-2 opacity-30">???</div>
+                          <Badge variant="outline" className="text-xs">
+                            {rarityToSet(entry.rarity)}
+                          </Badge>
+                          <p className="text-xs text-gray-500 mt-2">Not yet spotted</p>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
         </div>
+      )}
 
-        {/* Missions Sidebar */}
-        <div className="lg:col-span-1">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Target className="h-5 w-5 text-primary-600" />
-                Missions
-              </CardTitle>
-              <CardDescription>Complete missions to earn badges</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-gray-500">Missions coming soon!</p>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      {/* Entry Detail Modal */}
+      {selectedEntry && user && (
+        <EntryDetailModal
+          entry={selectedEntry}
+          userEntry={getUserEntry(selectedEntry.id)}
+          userId={user.id}
+          open={!!selectedEntry}
+          onOpenChange={(open) => !open && setSelectedEntry(null)}
+          onFeaturedChange={loadData}
+        />
+      )}
 
-      {/* Badge Unlock Modal */}
-      <BadgeUnlockModal
-        badge={unlockedBadge}
-        open={!!unlockedBadge}
-        onClose={() => setUnlockedBadge(null)}
-      />
+      {/* V1 Unlock Modal */}
+      {showUnlockModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => setShowUnlockModal(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl p-8 max-w-md mx-4 text-center"
+          >
+            <Trophy className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
+            <h2 className="text-3xl font-bold mb-2">New Pages Unlocked!</h2>
+            <p className="text-gray-600 mb-6">
+              You've completed 30% of V0. New items await!
+            </p>
+            <Button onClick={() => setShowUnlockModal(false)}>Explore V1</Button>
+          </motion.div>
+        </motion.div>
+      )}
     </div>
   );
 }

@@ -110,7 +110,7 @@ const PLACEHOLDER_IMAGES = [
   'https://images.unsplash.com/photo-1605000797499-95a51c7b0eaa?w=400',
 ];
 
-const MOCK_USER_NAMES = ['Collector', 'Curator', 'Explorer', 'Seeker', 'Finder'];
+const MOCK_USER_NAMES = ['Spotter', 'Explorer', 'Seeker', 'Finder', 'Observer'];
 
 function initializeMockData() {
   const now = new Date();
@@ -151,8 +151,8 @@ function initializeMockData() {
     const label = SEEDED_LABELS.find((l) => l.id === submission.proposedLabelId);
     const uploaderName = MOCK_USER_NAMES[Math.floor(Math.random() * MOCK_USER_NAMES.length)];
     const likes = Math.floor(Math.random() * 50);
-    const reasons: FeedItem['reason'][] = ['trending', 'new', 'rare-find'];
-    const tags = ['#rare', '#collectible', '#vintage', '#unique'];
+    const reasons: FeedItem['reason'][] = ['trending', 'new', 'suggested'];
+    const tags = ['#spotted', '#found', '#seen', '#unique'];
     
     feedItems.push({
       id: `feed_${i + 1}`,

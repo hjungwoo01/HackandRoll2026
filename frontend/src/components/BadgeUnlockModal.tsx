@@ -4,6 +4,7 @@ import { Star, Shield, Crown } from 'lucide-react';
 import { motion } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import { useEffect } from 'react';
+import { rarityToSet, getSetColor } from '../utils/sanitizeCopy';
 import type { Badge as BadgeType } from '../api/types';
 
 interface BadgeUnlockModalProps {
@@ -18,7 +19,7 @@ const iconMap: Record<string, typeof Star> = {
   Crown,
 };
 
-const rarityColors = {
+const setThemeColors = {
   common: { bg: 'bg-gray-200', text: 'text-gray-700', border: 'border-gray-300' },
   rare: { bg: 'bg-blue-200', text: 'text-blue-700', border: 'border-blue-300' },
   epic: { bg: 'bg-purple-200', text: 'text-purple-700', border: 'border-purple-300' },
@@ -38,7 +39,7 @@ export function BadgeUnlockModal({ badge, open, onClose }: BadgeUnlockModalProps
   if (!badge) return null;
 
   const Icon = iconMap[badge.icon] || Star;
-  const colors = rarityColors[badge.rarity];
+  const colors = setThemeColors[badge.rarity];
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -70,7 +71,7 @@ export function BadgeUnlockModal({ badge, open, onClose }: BadgeUnlockModalProps
                   : 'destructive'
               }
             >
-              {badge.rarity}
+              {rarityToSet(badge.rarity)}
             </Badge>
           </div>
         </div>

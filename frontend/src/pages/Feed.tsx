@@ -84,7 +84,7 @@ export function Feed() {
         <div className="flex items-center justify-between mb-2">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Discovery</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Scroll the rare. Keep it clean.</p>
+            <p className="text-sm text-gray-500 mt-0.5">Scroll the finds. Keep it clean.</p>
           </div>
           <Button
             variant="outline"

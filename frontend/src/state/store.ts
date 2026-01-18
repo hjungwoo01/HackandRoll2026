@@ -28,7 +28,7 @@ interface AppState {
   fetchLabels: () => Promise<void>;
   submitImage: (file: File, labelId: number, caption?: string) => Promise<Submission>;
   fetchUserSubmissions: (userId: string) => Promise<void>;
-  fetchLeaderboard: () => Promise<void>;
+  fetchLeaderboard: (userId?: string) => Promise<void>;
   
   // Feed
   fetchFeed: (userId: string | null, filter?: 'for-you' | 'new', cursor?: { created_at: string; id: string }) => Promise<void>;
@@ -95,9 +95,9 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  fetchLeaderboard: async () => {
+  fetchLeaderboard: async (userId?: string) => {
     try {
-      const leaderboard = await supabaseApi.getLeaderboard();
+      const leaderboard = await supabaseApi.getLeaderboard(50, userId);
       set({ leaderboard });
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Failed to fetch leaderboard' });

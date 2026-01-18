@@ -24,6 +24,10 @@ export interface Submission {
   created_at: string;
   report_count: number;
   status: 'active' | 'flagged' | 'rejected';
+  coarse_label_id?: number | null;
+  coarse_confidence?: number | null;
+  fine_dex_entry_id?: number | null;
+  fine_confidence?: number | null;
 }
 
 export interface UserStats {
@@ -178,7 +182,7 @@ export const supabaseApi = {
           reportCount: s.report_count || 0,
           flagged: s.status === 'flagged' || s.status === 'rejected',
           caption: s.caption || undefined,
-          reason: filter === 'new' ? 'new' as const : 'trending' as const,
+            reason: filter === 'new' ? 'new' as const : 'popular' as const,
         };
       });
 
@@ -292,7 +296,12 @@ export const supabaseApi = {
     userId: string,
     file: File,
     labelId: number,
-    caption?: string
+    caption?: string,
+    coarseLabelId?: number | null,
+    coarseConfidence?: number | null,
+    fineDexEntryId?: number | null,
+    fineConfidence?: number | null,
+    fineItemName?: string | null
   ): Promise<Submission> {
     // Verify user is authenticated
     const { data: { user } } = await supabase.auth.getUser();
@@ -324,6 +333,9 @@ export const supabaseApi = {
     console.log('Storage upload successful:', uploadData);
 
     // Insert submission record
+    // Use fineItemName in caption if caption is not provided
+    const finalCaption = caption || fineItemName || null;
+    
     const { data, error } = await supabase
       .from('submissions')
       .insert({
@@ -331,9 +343,13 @@ export const supabaseApi = {
         uploader_id: userId,
         image_path: imagePath,
         label_id: labelId,
-        caption: caption || null,
+        caption: finalCaption,
         status: 'active', // Explicitly set status
         report_count: 0, // Explicitly set report_count
+        coarse_label_id: coarseLabelId || null,
+        coarse_confidence: coarseConfidence || null,
+        fine_dex_entry_id: fineDexEntryId || null,
+        fine_confidence: fineConfidence || null,
       })
       .select()
       .single();
@@ -367,7 +383,7 @@ export const supabaseApi = {
   },
 
   // Get leaderboard
-  async getLeaderboard(limit: number = 50): Promise<(UserStats & { profile: Profile })[]> {
+  async getLeaderboard(limit: number = 50, currentUserId?: string): Promise<(UserStats & { profile: Profile })[]> {
     // Fetch user_stats and profiles separately since there's no direct FK
     const { data: statsData, error: statsError } = await supabase
       .from('user_stats')
@@ -378,7 +394,26 @@ export const supabaseApi = {
     if (statsError) throw statsError;
     if (!statsData || statsData.length === 0) return [];
 
-    const userIds = statsData.map((s: any) => s.user_id);
+    // If current user is provided and not in top results, fetch their stats separately
+    const topUserIds = statsData.map((s: any) => s.user_id);
+    const currentUserInTop = currentUserId && topUserIds.includes(currentUserId);
+    
+    let allStatsData = [...statsData];
+    if (currentUserId && !currentUserInTop) {
+      const { data: currentUserStats, error: currentUserError } = await supabase
+        .from('user_stats')
+        .select('*')
+        .eq('user_id', currentUserId)
+        .maybeSingle();
+      
+      if (!currentUserError && currentUserStats) {
+        allStatsData.push(currentUserStats);
+        // Re-sort to maintain order
+        allStatsData.sort((a: any, b: any) => b.points - a.points);
+      }
+    }
+
+    const userIds = allStatsData.map((s: any) => s.user_id);
     const { data: profilesData, error: profilesError } = await supabase
       .from('profiles')
       .select('id, username, display_name')
@@ -388,7 +423,7 @@ export const supabaseApi = {
 
     const profilesMap = new Map((profilesData || []).map((p: any) => [p.id, p]));
 
-    return statsData.map((stat: any) => ({
+    return allStatsData.map((stat: any) => ({
       ...stat,
       profile: profilesMap.get(stat.user_id) || { id: stat.user_id, username: 'Unknown', display_name: 'Unknown User' },
     }));

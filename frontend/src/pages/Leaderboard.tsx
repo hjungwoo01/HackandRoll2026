@@ -22,13 +22,13 @@ export function Leaderboard() {
   const { leaderboard, fetchLeaderboard } = useStore();
 
   useEffect(() => {
-    fetchLeaderboard();
-  }, [fetchLeaderboard]);
+    fetchLeaderboard(user?.id);
+  }, [fetchLeaderboard, user?.id]);
 
   if (leaderboard.length === 0) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <PageHeader title="Leaderboard" subtitle="See how you rank against other collectors" />
+        <PageHeader title="Leaderboard" subtitle="See how you rank against other spotters" />
         <div className="text-center py-12">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
           <p className="mt-4 text-gray-600">Loading leaderboard...</p>
@@ -37,12 +37,18 @@ export function Leaderboard() {
     );
   }
 
-  const currentUserRank = user ? leaderboard.findIndex((u) => u.user_id === user.id) + 1 : 0;
+  const currentUserIndex = user ? leaderboard.findIndex((u) => u.user_id === user.id) : -1;
+  const currentUserRank = currentUserIndex >= 0 ? currentUserIndex + 1 : 0;
   const currentUserStats = user ? leaderboard.find((u) => u.user_id === user.id) : null;
   
-  // Calculate percentile (simplified for demo)
+  // Calculate percentile
   const totalUsers = leaderboard.length;
-  const percentile = currentUserRank > 0 ? Math.round(((totalUsers - currentUserRank) / totalUsers) * 100) : 0;
+  // Percentile: percentage of users you're performing better than
+  // Formula: ((totalUsers - rank) / totalUsers) * 100
+  // If rank is 1 of 10, you're better than 9/10 = 90%
+  const percentile = currentUserRank > 0 && totalUsers > 0 
+    ? Math.max(0, Math.min(100, Math.round(((totalUsers - currentUserRank) / totalUsers) * 100)))
+    : 0;
 
   const getRankIcon = (rank: number) => {
     if (rank === 1) return <Medal className="h-6 w-6 text-yellow-500" />;
@@ -55,7 +61,7 @@ export function Leaderboard() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <PageHeader
         title="Leaderboard"
-        subtitle="See how you rank against other collectors"
+        subtitle="See how you rank against other spotters"
         rightAction={
           <Dialog>
             <DialogTrigger asChild>
@@ -105,7 +111,7 @@ export function Leaderboard() {
                     {formatPercentile(percentile)}
                   </div>
                   <p className="text-sm opacity-90">
-                    You're performing better than {percentile}% of collectors
+                    You're performing better than {percentile}% of spotters
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4 md:col-span-2">
@@ -135,7 +141,7 @@ export function Leaderboard() {
       {/* Leaderboard Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Top Collectors</CardTitle>
+          <CardTitle>Top Spotters</CardTitle>
         </CardHeader>
         <CardContent>
           {leaderboard.length === 0 ? (

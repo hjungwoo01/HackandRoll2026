@@ -12,4 +12,5 @@ dependencies = [
     "google-generativeai>=0.8.6",
     "supabase>=2.27.2",
     "uvicorn>=0.40.0",
+    "python-multipart"
 ]

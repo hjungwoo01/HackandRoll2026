@@ -2,6 +2,7 @@ import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
 import { CheckCircle2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { sanitizeCopy } from '../utils/sanitizeCopy';
 import type { Mission } from '../api/types';
 
 interface MissionCardProps {
@@ -41,7 +42,7 @@ export function MissionCard({ mission, rewardBadgeName }: MissionCardProps) {
                 mission.completed ? 'text-green-900' : 'text-gray-900'
               }`}
             >
-              {mission.title}
+              {sanitizeCopy(mission.title)}
             </h3>
             {mission.completed && (
               <Badge variant="success" className="text-xs">
@@ -49,7 +50,7 @@ export function MissionCard({ mission, rewardBadgeName }: MissionCardProps) {
               </Badge>
             )}
           </div>
-          <p className="text-xs text-gray-600 mb-2">{mission.description}</p>
+          <p className="text-xs text-gray-600 mb-2">{sanitizeCopy(mission.description)}</p>
           <div className="space-y-1">
             <div className="flex items-center justify-between text-xs text-gray-500">
               <span>Progress</span>

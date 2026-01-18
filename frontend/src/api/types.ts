@@ -84,7 +84,7 @@ export type FeedItem = {
   savedByMe: boolean;
   likedByMe: boolean;
   tags?: string[];
-  reason?: 'trending' | 'new' | 'near-you' | 'similar-to-you' | 'rare-find';
+  reason?: 'popular' | 'new' | 'near-you' | 'similar-to-you' | 'suggested';
   caption?: string;
   reportCount: number;
   flagged: boolean;
