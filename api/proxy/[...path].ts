@@ -26,6 +26,9 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
+  // Ensure we always return JSON content type
+  res.setHeader('Content-Type', 'application/json');
+  
   // Extract the path and query string from the catch-all route
   const path = Array.isArray(req.query.path) 
     ? req.query.path.join('/') 
